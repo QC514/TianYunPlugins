@@ -11,7 +11,7 @@
 # [platform: all] 适用的平台
 # [open_source: false]是否开源
 # [icon: https://pp.myapp.com/ma_icon/0/icon_4848_1772677983/256]图标链接地址，请使用48像素的正方形图标，支持http和https
-# [version: 1.0.0]版本号
+# [version: 1.0.1]版本号
 # [public: true] 是否发布？值为true或false，不设置则上传aut云时会自动设置为true，false时上传后不显示在市场中，但是搜索能搜索到，方便开发者测试
 # [price: 18.88] 上架价格
 # [description: 适配作者：YSJohnson的太平洋汽车脚本。ck提交青龙。格式“账号#密码#openid”。<br>指令：太平洋（登录|查询|管理|授权|清理|教程）<br>1.4.0更新：修复查询显示问题；<br>1.3.0更新：优化查询显示；<br>1.1.0更新：账号管理增加扫码获取提现参数openid，实现自动提现；<br>1.0.0初版：支持批量ck登录，支持代理。] 使用方法尽量写具体
@@ -563,8 +563,7 @@ def query():
                     continue
                 nickname, point = get_userinfo(tpy_userid, session_id)
                 balance, total = get_balance(session_id)
-                sender.reply(f"""
-====={full_scripts_name}详情=====
+                sender.reply(f"""====={full_scripts_name}详情=====
 📱 账号：{mask_phone(account)}
 👤 昵称：{nickname}
 💹 提现：{tixian}
@@ -607,8 +606,7 @@ def cron_task():
 def notify_user(user, account, message):
     """发送用户通知"""
     try:
-        notify_msg = f"""
-====={full_scripts_name}账号通知=====
+        notify_msg = f"""====={full_scripts_name}账号通知=====
 📱 账号: {account}
 📢 消息: {message}
 =================="""
@@ -841,8 +839,7 @@ def manage_accounts():
     """管理账号"""
     accounts = eval(middleware.bucketGet(bucket=f'{bucket_prefix}_user', key=userid))
     if not accounts:
-        sender.reply(f"""
-=====账号管理=====
+        sender.reply(f"""=====账号管理=====
 ❌ 未找到任何账号
 ------------------
 💡 发送"{login_cmd}"绑定账号
@@ -910,8 +907,7 @@ def manage_accounts():
                 pay_choice = '1'
                 if coin_price > 0:
                     user_coin = Decimal(middleware.bucketGet('coin_bucket', userid) or '0')
-                    auth_guide = f"""
-=====批量授权方式=====
+                    auth_guide = f"""=====批量授权方式=====
 [1] 微信支付
 [2] 积分支付 (当前积分: {user_coin})
 --------------------
@@ -937,8 +933,7 @@ def manage_accounts():
                             if token:
                                 add_to_qinglong(token, account, userid)
                             success_count += 1
-                        sender.reply(f"""
-=====批量授权成功=====
+                        sender.reply(f"""=====批量授权成功=====
 💰 支付: {amount}元
 ⏰ 时长: {days}天
 ✅ 成功: {success_count}个账号
@@ -955,8 +950,7 @@ def manage_accounts():
                     months = int(months)
                     need_coin = coin_price * months * len(accounts)
                     if user_coin < need_coin:
-                        sender.reply(f"""
-=====积分不足=====
+                        sender.reply(f"""=====积分不足=====
 ❌ 积分余额不足
 ------------------
 💰 所需积分: {need_coin}
@@ -975,8 +969,7 @@ def manage_accounts():
                         if token:
                             add_to_qinglong(token, account, userid)
                         success_count += 1
-                    sender.reply(f"""
-=====批量授权成功=====
+                    sender.reply(f"""=====批量授权成功=====
 💰 消耗: {need_coin}积分
 ⏰ 时长: {days}天
 ✅ 成功: {success_count}个账号
@@ -1012,8 +1005,7 @@ def show_account_menu(account):
     auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
     auth_status = "✅ 已授权" if auth and auth > today else "❌ 未授权"
     auth_info = f"\n    到期: {auth}" if auth and auth > today else ""
-    menu = f"""
-=====账号操作=====
+    menu = f"""=====账号操作=====
 📱 账号: {mask_phone(account)}
 🔐 状态: {auth_status}{auth_info}
 ------------------
@@ -1081,8 +1073,7 @@ def auth_account(account):
             if env_id_str:
                 env_ids = json.loads(env_id_str)
                 enable_in_qinglong(env_ids)
-            sender.reply(f"""
-=====授权成功=====
+            sender.reply(f"""=====授权成功=====
 📱 账号: {mask_phone(account)}
 ⏰ 时长: {days}天
 📅 到期: {auth_time}
@@ -1097,8 +1088,7 @@ def auth_account(account):
 回复数字选择方式
 回复"q"退出"""
         else:
-            auth_guide = f"""
-=====授权方式=====
+            auth_guide = f"""=====授权方式=====
 [1] 微信支付
 [2] 积分支付 (当前积分: {user_coin})
 ------------------
@@ -1142,8 +1132,7 @@ def auth_account(account):
                 if env_id_str:
                     env_ids = json.loads(env_id_str)
                     enable_in_qinglong(env_ids)
-                sender.reply(f"""
-=====授权成功=====
+                sender.reply(f"""=====授权成功=====
 📱 账号: {mask_phone(account)}
 ⏰ 时长: {days}天
 📅 到期: {auth_time}
@@ -1165,8 +1154,7 @@ def auth_account(account):
                     if env_id_str:
                         env_ids = json.loads(env_id_str)
                         enable_in_qinglong(env_ids)
-                    sender.reply(f"""
-    =====授权成功=====
+                    sender.reply(f"""    =====授权成功=====
     📱 账号: {mask_phone(account)}
     💰 支付: {amount}元
     ⏰ 时长: {days}天
@@ -1190,8 +1178,7 @@ def auth_account(account):
                 raise ValueError()
             need_coin = month_coin * months
             if user_coin < need_coin:
-                sender.reply(f"""
-=====积分不足=====
+                sender.reply(f"""=====积分不足=====
 ❌ 积分余额不足
 ------------------
 💰 所需积分: {need_coin}
@@ -1213,8 +1200,7 @@ def auth_account(account):
             if env_id_str:
                 env_ids = json.loads(env_id_str)
                 enable_in_qinglong(env_ids)
-            sender.reply(f"""
-=====授权成功=====
+            sender.reply(f"""=====授权成功=====
 📱 账号: {mask_phone(account)}
 💰 消耗: {need_coin}积分
 ⏰ 时长: {months}月
@@ -1244,8 +1230,7 @@ def process_payment(amount, days):
     if zfzt:
         sender.reply('当前有人正在支付,请稍后再试！')
         exit(0)
-    pay_msg = f"""
-=====微信扫码支付====
+    pay_msg = f"""=====微信扫码支付====
 🎫 商品: {full_scripts_name}授权
 📅 时长: {days}天
 💰 金额: {amount}元
@@ -1276,8 +1261,7 @@ def process_payment(amount, days):
         if paid_amount >= amount:
             return True
         else:
-            sender.reply(f"""
-=====支付失败=====
+            sender.reply(f"""=====支付失败=====
 ❌ 支付金额不足
 ------------------
 💰 应付: {amount}元
@@ -1285,8 +1269,7 @@ def process_payment(amount, days):
 ==================""")
             return False
     except Exception as e:
-        sender.reply(f"""
-=====支付异常=====
+        sender.reply(f"""=====支付异常=====
 ❌ 支付验证失败
 ------------------
 ⚠️ 错误: {str(e)}
@@ -1420,8 +1403,7 @@ def update_qinglong_env():
                 success += 1
             except Exception as e:
                 failed += 1
-    sender.reply(f"""
-=====更新青龙完成=====
+    sender.reply(f"""=====更新青龙完成=====
 共计: {total_users}个用户{total_accounts}个账号
 ------------------
 ✅ 成功: {success}个账号
@@ -1466,8 +1448,7 @@ def auth_all_users():
                 except Exception as e:
                     failed += 1
                     log_operation('batch_auth', user, account, 'failed', str(e))
-        sender.reply(f"""
-=====授权完成=====
+        sender.reply(f"""=====授权完成=====
 ✅ 成功: {success}个账号
 ❌ 失败: {failed}个账号
 ⏰ 授权: {days}天
@@ -1604,8 +1585,7 @@ def auth_specific_user():
             if env_ids_str:
                 env_ids = json.loads(env_ids_str)
                 enable_in_qinglong(env_ids)
-            sender.reply(f"""
-=====授权成功=====
+            sender.reply(f"""=====授权成功=====
 📱 账号: {mask_phone(account)}
 ⏰ 时长: {days}天
 📅 到期: {auth_time}
@@ -1638,8 +1618,7 @@ def delete_account(account):
                 middleware.bucketSet(f'{bucket_prefix}_user', userid, json.dumps(accounts, ensure_ascii=False))
             except Exception as e:
                 raise Exception(f"用户列表更新失败: {str(e)}")
-        sender.reply(f"""
-=====删除成功=====
+        sender.reply(f"""=====删除成功=====
 📱 账号: {mask_phone(account)}
 ✅ 状态: 已删除
 ==================""")
@@ -1656,8 +1635,7 @@ def show_ck(account):
     """查看账号ck"""
     token = middleware.bucketGet(f'{bucket_prefix}_token', account)
     if token:
-        sender.reply(f"""
-====={full_scripts_name}账号ck=====
+        sender.reply(f"""====={full_scripts_name}账号ck=====
 📱 账号: {mask_phone(account)}
 🔑 CK: {token}
 ====================""")
