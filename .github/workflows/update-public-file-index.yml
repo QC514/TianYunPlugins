@@ -29,8 +29,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate publicFileIndex.json
-        run: python scripts/generate_public_file_index.py
+      - name: Clear and regenerate publicFileIndex.json
+        run: |
+          set -euo pipefail
+          # Always rebuild from scratch so old entries never linger.
+          : > publicFileIndex.json
+          python scripts/generate_public_file_index.py
 
       - name: Commit and push if changed
         run: |
