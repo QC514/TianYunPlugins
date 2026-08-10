@@ -2239,6 +2239,22 @@
   "admin": false,
   "disable": true
  },
+ "plugins/rujingxianghai_太平洋汽车.py": {
+  "id": "太平洋汽车_2",
+  "name": "太平洋汽车_2",
+  "title": "太平洋汽车",
+  "type": "python",
+  "path": "plugins/rujingxianghai_太平洋汽车.py",
+  "version": "v1.2",
+  "desc": "太平洋汽车插件（每周0.6元 + 315积分）<br>变量格式: 手机号#密码<br>功能: 绑定、查询、授权、提交面板、到期检测<br>查询返回: 积分、余额、已提现、累计收入<br>指令: 太平洋登录、太平洋查询、太平洋管理、太平洋授权、太平洋教程、太平洋检测",
+  "rule": "^太平洋(登录|登陆)$|^太平洋(查询|管理|授权|检测|教程)$",
+  "icon": "https://img-upload.vorto.cc/beb5a0d45aa58e08348e1e4076fa419e.jpg",
+  "author": "rujingxianghai",
+  "class": "工具类",
+  "public": true,
+  "admin": false,
+  "disable": false
+ },
  "plugins/wqwl-pzdl.js": {
   "id": "wqwl-pzdl_2",
   "name": "wqwl-pzdl_2",
@@ -3021,22 +3037,6 @@
   "class": "",
   "public": true,
   "admin": true,
-  "disable": false
- },
- "plugins/太平洋汽车.py": {
-  "id": "太平洋汽车_2",
-  "name": "太平洋汽车_2",
-  "title": "太平洋汽车",
-  "type": "python",
-  "path": "plugins/太平洋汽车.py",
-  "version": "v1.2",
-  "desc": "太平洋汽车插件（每周0.6元 + 315积分）<br>变量格式: 手机号#密码<br>功能: 绑定、查询、授权、提交面板、到期检测<br>查询返回: 积分、余额、已提现、累计收入<br>指令: 太平洋登录、太平洋查询、太平洋管理、太平洋授权、太平洋教程、太平洋检测",
-  "rule": "^太平洋(登录|登陆)$|^太平洋(查询|管理|授权|检测|教程)$",
-  "icon": "https://img-upload.vorto.cc/beb5a0d45aa58e08348e1e4076fa419e.jpg",
-  "author": "rujingxianghai",
-  "class": "工具类",
-  "public": true,
-  "admin": false,
   "disable": false
  },
  "plugins/太平通.py": {
