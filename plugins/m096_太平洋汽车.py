@@ -1,38 +1,36 @@
-# [author: mrconli]
-# [title: m096_太平洋汽车]
+# [author: qingyun]
+# [title: 太平洋汽车]
 # [language: python]
 # [class: 工具类]
-# [service: 呆瓜群：591022646，插件群：1040780519] 售后联系方式
+# [service: 68025408] 售后联系方式
 # [disable: false] 禁用开关，true表示禁用，false表示可用
 # [admin: false] 是否为管理员指令
-# [rule: ^太平洋(.*)|(.*)洋汽车$] 匹配规则，多个规则时向下依次写多个
+# [rule: ^(太平洋(.*)|(.*)太平洋|太平洋)$] 匹配规则，多个规则时向下依次写多个
 # [cron: 26 8,18 * * *] cron定时，支持5位域和6位域
-# [priority: 99999999] 优先级，数字越大表示优先级越高
+# [priority: 1] 优先级，数字越大表示优先级越高
 # [platform: all] 适用的平台
 # [open_source: false]是否开源
 # [icon: https://pp.myapp.com/ma_icon/0/icon_4848_1772677983/256]图标链接地址，请使用48像素的正方形图标，支持http和https
-# [version: 1.5.0]版本号
+# [version: 1.0.0]版本号
 # [public: true] 是否发布？值为true或false，不设置则上传aut云时会自动设置为true，false时上传后不显示在市场中，但是搜索能搜索到，方便开发者测试
 # [price: 18.88] 上架价格
 # [description: 适配作者：YSJohnson的太平洋汽车脚本。ck提交青龙。格式“账号#密码#openid”。<br>指令：太平洋（登录|查询|管理|授权|清理|教程）<br>1.4.0更新：修复查询显示问题；<br>1.3.0更新：优化查询显示；<br>1.1.0更新：账号管理增加扫码获取提现参数openid，实现自动提现；<br>1.0.0初版：支持批量ck登录，支持代理。] 使用方法尽量写具体
 
+# [param: {"required":true,"key":"qingyun_config.zsm","bool":false,"placeholder":"示例: http://10.10.10.10:8080/zsm.jpg","name":"收款码地址","desc":"赞赏码或收款码地址"}]
+# [param: {"required":true,"key":"qingyun_tpyqc.ql_config","bool":false,"placeholder":"http://xx.xx.xx.xx:xxxx|xxx|xxx","name":"对接青龙","desc":"http://ip:端口丨ClientID丨ClientSecret"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.var_name","bool":false,"placeholder":"m_tpyqc","name":"环境变量名","desc":"青龙容器内的变量名，默认为：m_tpyqc"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.price","bool":false,"placeholder":"1","name":"上车价格","desc":"上车价格(单位:元)/30天"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.coin","bool":false,"placeholder":"不填为关闭状态","name":"积分开通","desc":"授权一个月的积分，只能为整数"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.coin_bucket","bool":false,"placeholder":"","name":"积分数据桶","desc":"默认使用dd_sign_points"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.is_proxy","bool":true,"placeholder":"","name":"是否启用代理","desc":"true/false"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.proxy_pool","bool":false,"placeholder":"http://代理池API地址","name":"代理池地址","desc":"代理API服务地址"}]
 
-
-# [param: {"required":true,"key":"mrconli.config.zsm","bool":false,"placeholder":"示例: http://10.10.10.10:8080/zsm.jpg","name":"收款码地址","desc":"赞赏码或收款码地址"}]
-# [param: {"required":true,"key":"mrconli.tpyqc.ql_config","bool":false,"placeholder":"http://xx.xx.xx.xx:xxxx|xxx|xxx","name":"对接青龙","desc":"http://ip:端口丨ClientID丨ClientSecret"}]
-# [param: {"required":false,"key":"mrconli.tpyqc.var_name","bool":false,"placeholder":"m_tpyqc","name":"环境变量名","desc":"青龙容器内的变量名，默认为：m_tpyqc"}]
-# [param: {"required":false,"key":"mrconli.tpyqc.price","bool":false,"placeholder":"1","name":"上车价格","desc":"上车价格(单位:元)/30天"}]
-# [param: {"required":false,"key":"mrconli.tpyqc.coin","bool":false,"placeholder":"不填为关闭状态","name":"积分开通","desc":"授权一个月的积分，只能为整数"}]
-# [param: {"required":false,"key":"mrconli.tpyqc.coin_bucket","bool":false,"placeholder":"","name":"积分数据桶","desc":"默认使用dd_sign_points"}]
-# [param: {"required":false,"key":"mrconli.tpyqc.is_proxy","bool":true,"placeholder":"","name":"是否启用代理","desc":"true/false"}]
-# [param: {"required":false,"key":"mrconli.tpyqc.proxy_pool","bool":false,"placeholder":"http://代理池API地址","name":"代理池地址","desc":"代理API服务地址"}]
-
-scripts_name =  "太平洋"
-full_scripts_name =  "太平洋汽车"
-bucket_prefix = "mrconli.tpyqc"
+scripts_name = "太平洋"
+full_scripts_name = "太平洋汽车"
+bucket_prefix = "qingyun_tpyqc"
 
 from datetime import datetime, timedelta  # 操作日期、时间以及时间间隔
-# from typing import Self  
+# from typing import Self
 import middleware  # autman的中间件
 from decimal import Decimal  # 处理浮点数
 import time  # 处理时间
@@ -41,9 +39,9 @@ import re  # 处理正则表达式
 import requests  # 处理http请求
 import uuid
 
-
 # 禁用 SSL 警告
 import urllib3
+
 urllib3.disable_warnings()
 
 # 禁用 InsecureRequestWarning
@@ -52,11 +50,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 senderID = middleware.getSenderID()  # 获取发送者QQ号
 sender = middleware.Sender(senderID)  # 获取发送者对象
 userid = sender.getUserID()  # 存储当前发送者的用户 ID，与 senderID 类似，但通常用于内部标识
-uservalue = middleware.bucketGet(bucket=f'{bucket_prefix}.user', key=userid)
+uservalue = middleware.bucketGet(bucket=f'{bucket_prefix}_user', key=userid)
 today_date = datetime.now().date()
 today_time = str(today_date)
-
-
 
 # 代理配置
 MAX_RETRIES = 10  # 最大重试次数
@@ -119,6 +115,7 @@ def _send_request(method, url, **kwargs):
             raise
     raise Exception(f"请求失败，超过最大重试次数: {MAX_RETRIES}")
 
+
 ###   请求头    _send_request('GET',   _send_request('POST',
 
 def mask_phone(phone):
@@ -126,7 +123,8 @@ def mask_phone(phone):
     if not phone or len(phone) != 11:
         return phone
     return f"{phone[:3]}****{phone[7:]}"
- 
+
+
 def is_valid_phone(phone):
     """验证手机号格式是否正确
     Args:
@@ -136,12 +134,14 @@ def is_valid_phone(phone):
     """
     if not phone or not isinstance(phone, str):
         return False
-    pattern = r'^1[3-9]\d{9}$'    # 中国大陆手机号正则表达式：以1开头，第二位3-9，后面9位数字
+    pattern = r'^1[3-9]\d{9}$'  # 中国大陆手机号正则表达式：以1开头，第二位3-9，后面9位数字
     return re.match(pattern, phone) is not None
+
 
 # 登录验证及查询函数
 
 UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+
 
 def get_ck(account):
     """登录函数"""
@@ -153,21 +153,22 @@ def get_ck(account):
         headers = {
             'Host': 'mrobot.pcauto.com.cn',
             'Content-Type': 'application/x-www-form-urlencoded',
-        }  
-        data = f"password={password}&username={username}" 
+        }
+        data = f"password={password}&username={username}"
         result = _send_request('POST', url, headers=headers, data=data).json()
-    #    print(result)  
+        #    print(result)
         if result.get("status") == 0:
             session_id = result.get("common_session_id")
-            tpy_userid = result.get("userId")   
+            tpy_userid = result.get("userId")
             return True, tpy_userid, session_id
         else:
             print(f"\n 账号登录: ❌ ，原因是：{result.get('msg', '登录失败')}")
             return False, None, None
-            
+
     except Exception as e:
         print(f"\n 登录异常: ❌ ，{str(e)}")
         return False, None, None
+
 
 def get_userinfo(tpy_userid, session_id):
     """获取用户信息函数"""
@@ -195,6 +196,7 @@ def get_userinfo(tpy_userid, session_id):
     except Exception as e:
         print(f"\n ❌ 获取用户信息异常: {str(e)}")
         return None, None
+
 
 def get_balance(session_id):
     """获取钱包余额函数"""
@@ -229,6 +231,8 @@ def get_balance(session_id):
     except Exception as e:
         print(f"\n ❌ 获取钱包余额异常: {str(e)}")
         return None, None
+
+
 # -------------------------------------------------------------
 
 
@@ -310,7 +314,7 @@ def get_token_by_code(code):
         'code': code,
         'grant_type': 'authorization_code'
     }
-    
+
     headers = {
         'User-Agent': DEFAULT_UA,
         'Accept': '*/*',
@@ -318,7 +322,7 @@ def get_token_by_code(code):
         'Connection': 'keep-alive',
         'Host': 'api.weixin.qq.com'
     }
-    
+
     try:
         response = _send_request('GET', url, params=params, headers=headers)
         if response.status_code == 200:
@@ -369,7 +373,7 @@ def scan_login():
                 else:
                     print(f"❌ {nickname} 登录失败")
                     return False
-                
+
             elif result.get('status') == 'waiting':
                 pass
             elif result.get('status') == 'unknown':
@@ -390,12 +394,12 @@ def get_openid(account):
     if not openid or openid == False:
         sender.reply(f"❌ 获取openid失败")
         return False
-    token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
     parts = token.split("#")
     phone = parts[0]
     password = parts[1]
     new_token = f"{phone}#{password}#{openid}"
-    middleware.bucketSet(f'{bucket_prefix}.token', account, new_token)
+    middleware.bucketSet(f'{bucket_prefix}_token', account, new_token)
     add_to_qinglong(new_token, phone, userid)
     sender.reply(f"✅ 获取openid成功: {openid}")
 
@@ -417,7 +421,7 @@ def batch_login():
     update_count = 0
     fail_count = 0
     error_reasons = []
-    
+
     accounts_str = sender.input(120000, 1, False)
     if accounts_str == 'q':
         sender.reply('❌ 已退出登录操作！')
@@ -426,50 +430,51 @@ def batch_login():
         sender.reply('❌ 输入超时！')
         return
     accounts = [line.strip() for line in accounts_str.split('\n') if line.strip()]
-    
+
     total = len(accounts)
     if total == 0:
         sender.reply("❌ 未检测到有效账号信息")
         return
-    
+
     sender.reply(f"🔍 共检测到 {total} 个账号，开始批量登录...")
-    
+
     for index, account in enumerate(accounts, 1):
-        try:  
+        try:
             parts = account.split("#")
             if len(parts) != 2 and len(parts) != 3:
                 fail_count += 1
                 error_reasons.append(f"❌ {account} ck格式错误")
-                continue                                                                                              
+                continue
             success, tpy_userid, session_id = get_ck(account)
             if not success:
                 fail_count += 1
                 error_reasons.append(f"❌ {account} 登录认证失败")
-                continue                                                                                              
+                continue
             if success:
                 success_count += 1
                 phone = parts[0]
-                middleware.bucketSet(f'{bucket_prefix}.token', phone, account)
-                current_accounts = eval(middleware.bucketGet(f'{bucket_prefix}.user', userid) or '[]')
+                middleware.bucketSet(f'{bucket_prefix}_token', phone, account)
+                current_accounts = eval(middleware.bucketGet(f'{bucket_prefix}_user', userid) or '[]')
                 if phone not in current_accounts:
                     add_count += 1
                     status = f"✅ {mask_phone(phone)} 登录成功"
                     current_accounts.append(phone)
-                    middleware.bucketSet(f'{bucket_prefix}.user', userid, json.dumps(current_accounts, ensure_ascii=False))
+                    middleware.bucketSet(f'{bucket_prefix}_user', userid,
+                                         json.dumps(current_accounts, ensure_ascii=False))
                 else:
                     update_count += 1
                     status = f"✅ {mask_phone(phone)} 更新成功"
-                    accountVip = middleware.bucketGet(f'{bucket_prefix}.auth', phone)
+                    accountVip = middleware.bucketGet(f'{bucket_prefix}_auth', phone)
                     if not accountVip or accountVip < today_time:
                         sender.reply(f"⚠️ 账号未授权或授权已过期，环境变量未提交青龙...")
                     else:
                         add_to_qinglong(account, phone, userid)
             # 强制刷新全局账户缓存
-            uservalue = json.dumps(current_accounts) 
-               
+            uservalue = json.dumps(current_accounts)
+
             # 进度反馈
             progress = f"[{index}/{total}] {status}"
-            sender.reply(progress) 
+            sender.reply(progress)
         except Exception as e:
             fail_count += 1
             error_msg = f"无效账号: {account}：{e}"
@@ -488,13 +493,12 @@ def batch_login():
         f"发送“{manage_cmd}”管理账号\n"
         f"发送“{query_cmd}”查询账号\n"
     )
-    
+
     if error_reasons:
         report += "\n❌ 失败原因:\n" + "\n".join(error_reasons[:5])
         if len(error_reasons) > 5:
-            report += f"\n...等{len(error_reasons)-5}个错误" 
+            report += f"\n...等{len(error_reasons) - 5}个错误"
     sender.reply(report)
-
 
 
 def query():
@@ -538,8 +542,8 @@ def query():
 
     for account in target_accounts:
         try:
-            accountVip = middleware.bucketGet(f'{bucket_prefix}.auth', account)
-            token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+            accountVip = middleware.bucketGet(f'{bucket_prefix}_auth', account)
+            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
             if not token:
                 sender.reply(f'❌ 【{mask_phone(account)}】ck获取失败')
                 continue
@@ -556,7 +560,7 @@ def query():
                 success, tpy_userid, session_id = get_ck(token)
                 if not success:
                     sender.reply(f'❌ 【{mask_phone(account)}】查询失败')
-                    continue   
+                    continue
                 nickname, point = get_userinfo(tpy_userid, session_id)
                 balance, total = get_balance(session_id)
                 sender.reply(f"""
@@ -579,17 +583,17 @@ def cron_task():
     if imtype != 'fake':
         return
     try:
-        users = middleware.bucketAllKeys(f'{bucket_prefix}.user')
+        users = middleware.bucketAllKeys(f'{bucket_prefix}_user')
         for user in users:
-            accounts = eval(middleware.bucketGet(f'{bucket_prefix}.user', user) or '[]')
+            accounts = eval(middleware.bucketGet(f'{bucket_prefix}_user', user) or '[]')
             for account in accounts:
                 try:
-                    auth = middleware.bucketGet(f'{bucket_prefix}.auth', account)
+                    auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
                     if auth and auth <= today:
                         delete_from_qinglong(account)
                         notify_user(user, account, "授权已过期,环境变量已删除,请及时续费")
                         continue
-                    token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+                    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
                     if not token:
                         notify_user(user, account, "ck获取失败,请联系管理员")
                         continue
@@ -615,6 +619,7 @@ def notify_user(user, account, message):
         middleware.push('ipad', '', user, '', notify_msg)
     except Exception as e:
         print(f"发送通知失败: {str(e)}")
+
 
 def get_config():
     """获取插件配置"""
@@ -706,7 +711,7 @@ def add_to_qinglong(token, account, username):
             "Authorization": f"Bearer {ql_token}",
             "Content-Type": "application/json"
         }
-        
+
         # 强制更新逻辑（新增删除旧变量）
         existing_ids = []
         duplicate_vars = []
@@ -717,13 +722,13 @@ def add_to_qinglong(token, account, username):
                     existing_ids.append(env['id'])
                 elif env['name'] == var_name and env['value'] == token:  # 新增重复值检测
                     duplicate_vars.append(env['id'])
-        
+
         # 删除冲突变量（新增）
         if duplicate_vars:
             del_response = requests.delete(url, json=duplicate_vars, headers=headers)
             if del_response.status_code != 200:
                 raise Exception(f"删除冲突变量失败: {del_response.text}")
-        
+
         # 删除旧变量
         if existing_ids:
             del_response = requests.delete(url, json=existing_ids, headers=headers)
@@ -731,29 +736,29 @@ def add_to_qinglong(token, account, username):
                 raise Exception(f"删除旧变量失败: {del_response.text}")
 
         # 创建新变量（优化请求体格式）
-        auth_time = middleware.bucketGet(f'{bucket_prefix}.auth', account) or '未授权'
+        auth_time = middleware.bucketGet(f'{bucket_prefix}_auth', account) or '未授权'
         data = {
             "name": var_name,
             "value": token,
             "remarks": f"{full_scripts_name}账号:{account}丨用户:{username}丨授权时间:{auth_time}",
         }
-        
+
         # 添加容错重试机制（新增）
         max_retries = 3
         for attempt in range(max_retries):
             response = requests.post(url, headers=headers, json=[data])
             if response.status_code == 200:
                 new_ids = [item['id'] for item in response.json().get('data', [])]
-                middleware.bucketSet(f'{bucket_prefix}.env_id', account, json.dumps(new_ids))
+                middleware.bucketSet(f'{bucket_prefix}_env_id', account, json.dumps(new_ids))
                 return True
             elif response.status_code == 500 and "SequelizeUniqueConstraintError" in response.text:
-                print(f"🔄 检测到唯一性冲突，正在重试 ({attempt+1}/{max_retries})")
+                print(f"🔄 检测到唯一性冲突，正在重试 ({attempt + 1}/{max_retries})")
                 time.sleep(1)
-        
+
         # 增强错误信息（新增服务器响应详情）
         error_detail = response.json().get('message') or response.text
         raise Exception(f"操作失败：多次尝试后仍存在唯一性冲突 | {error_detail} [HTTP {response.status_code}]")
-        
+
     except Exception as e:
         error_msg = f"青龙操作失败: {str(e)}"
         print(error_msg)
@@ -834,7 +839,7 @@ def delete_from_qinglong(account):
 
 def manage_accounts():
     """管理账号"""
-    accounts = eval(middleware.bucketGet(bucket=f'{bucket_prefix}.user', key=userid))
+    accounts = eval(middleware.bucketGet(bucket=f'{bucket_prefix}_user', key=userid))
     if not accounts:
         sender.reply(f"""
 =====账号管理=====
@@ -854,8 +859,8 @@ def manage_accounts():
 ------------------
 账号列表:"""
     for i, account in enumerate(accounts, 1):
-        token = middleware.bucketGet(f'{bucket_prefix}.token', account)
-        auth = middleware.bucketGet(f'{bucket_prefix}.auth', account)
+        token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+        auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
         auth_status = "✅ 已授权" if auth and auth > today else "❌ 未授权"
         account_list += f"\n[{i}] {mask_phone(account)}\n    {auth_status}"
         if auth and auth > today:
@@ -877,7 +882,7 @@ def manage_accounts():
             # 删除全部账号逻辑
             for account in accounts:
                 delete_account(account)
-            middleware.bucketSet(f'{bucket_prefix}.user', userid, '[]')
+            middleware.bucketSet(f'{bucket_prefix}_user', userid, '[]')
             sender.reply("✅ 已删除全部账号")
         elif choice == '02':
             # 查看全部ck逻辑
@@ -926,9 +931,9 @@ def manage_accounts():
                         success_count = 0
                         for account in accounts:
                             auth_time = calculate_auth_time(account, days / 30)
-                            middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
-                            token = middleware.bucketGet(f'{bucket_prefix}.token', account)
-                          
+                            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+                            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+
                             if token:
                                 add_to_qinglong(token, account, userid)
                             success_count += 1
@@ -964,9 +969,9 @@ def manage_accounts():
                     success_count = 0
                     for account in accounts:
                         auth_time = calculate_auth_time(account, months)
-                        middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
-                        token = middleware.bucketGet(f'{bucket_prefix}.token', account)
-                       
+                        middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+                        token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+
                         if token:
                             add_to_qinglong(token, account, userid)
                         success_count += 1
@@ -980,7 +985,7 @@ def manage_accounts():
 
                 # 更新青龙状态
                 for account in accounts:
-                    env_id_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+                    env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                     if env_id_str:
                         env_ids = json.loads(env_id_str)
                         enable_in_qinglong(env_ids)
@@ -1004,7 +1009,7 @@ def manage_accounts():
 
 def show_account_menu(account):
     """显示账号操作菜单"""
-    auth = middleware.bucketGet(f'{bucket_prefix}.auth', account)
+    auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
     auth_status = "✅ 已授权" if auth and auth > today else "❌ 未授权"
     auth_info = f"\n    到期: {auth}" if auth and auth > today else ""
     menu = f"""
@@ -1046,7 +1051,7 @@ def auth_account(account):
     """账号授权"""
     try:
         # 从配置获取积分桶名称
-        price = Decimal(middleware.bucketGet(bucket_prefix, 'price') or '1')   #  每月价格
+        price = Decimal(middleware.bucketGet(bucket_prefix, 'price') or '1')  # 每月价格
         coin_bucket = middleware.bucketGet(bucket_prefix, 'coin_bucket') or 'dd_sign_points'
         user_coin = middleware.bucketGet(coin_bucket, userid) or '0'
         user_coin = Decimal(user_coin)  # 使用 Decimal 处理大数值
@@ -1065,14 +1070,14 @@ def auth_account(account):
             if days <= 0:
                 raise ValueError()
             auth_time = calculate_auth_time(account, days / 30)
-            middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
+            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
             # 新增强制更新青龙变量逻辑
-            token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
             if token:
                 add_to_qinglong(token, account, userid)  # 强制更新变量
             else:
                 sender.reply("⚠️ token获取失败，请联系管理员")
-            env_id_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+            env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
             if env_id_str:
                 env_ids = json.loads(env_id_str)
                 enable_in_qinglong(env_ids)
@@ -1126,14 +1131,14 @@ def auth_account(account):
 
             if amount == 0:
                 auth_time = calculate_auth_time(account, days / 30)
-                middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
+                middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
                 # 新增强制更新青龙变量逻辑
-                token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+                token = middleware.bucketGet(f'{bucket_prefix}_token', account)
                 if token:
                     add_to_qinglong(token, account, userid)  # 强制更新变量
                 else:
                     sender.reply("⚠️ 令牌获取失败，请联系管理员")
-                env_id_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+                env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                 if env_id_str:
                     env_ids = json.loads(env_id_str)
                     enable_in_qinglong(env_ids)
@@ -1143,20 +1148,20 @@ def auth_account(account):
 ⏰ 时长: {days}天
 📅 到期: {auth_time}
 ==================""")
-                return True            
-            
+                return True
+
             if amount != 0:
                 payment_success = process_payment(amount, days)  # 处理支付
                 if payment_success:  # 只有在支付成功的情况下才进行授权
                     auth_time = calculate_auth_time(account, days / 30)
-                    middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
+                    middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
                     # 新增强制更新青龙变量逻辑
-                    token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+                    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
                     if token:
                         add_to_qinglong(token, account, userid)  # 强制更新变量
                     else:
                         sender.reply("⚠️ 令牌获取失败，请联系管理员")
-                    env_id_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+                    env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                     if env_id_str:
                         env_ids = json.loads(env_id_str)
                         enable_in_qinglong(env_ids)
@@ -1196,15 +1201,15 @@ def auth_account(account):
             new_coin = int(user_coin - need_coin)
             middleware.bucketSet(coin_bucket, userid, str(new_coin))
             auth_time = calculate_auth_time(account, months)
-            middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
-            token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
 
             if token:
                 add_to_qinglong(token, account, userid)  # 强制更新变量
             else:
                 sender.reply("⚠️ 令牌获取失败，请联系管理员")
 
-            env_id_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+            env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
             if env_id_str:
                 env_ids = json.loads(env_id_str)
                 enable_in_qinglong(env_ids)
@@ -1231,7 +1236,7 @@ def process_payment(amount, days):
     """处理支付"""
     if amount == 0:
         return True
-    zsm = middleware.bucketGet('mrconli.config', 'zsm')
+    zsm = middleware.bucketGet('qingyun_config', 'zsm')
     if not zsm:
         sender.reply("❌ 未配置收款码")
         return False
@@ -1292,7 +1297,7 @@ def process_payment(amount, days):
 def calculate_auth_time(account, months):
     """计算授权时间"""
     current = datetime.now().date()
-    auth = middleware.bucketGet(f'{bucket_prefix}.auth', account)
+    auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
     if auth and auth > str(current):
         start = datetime.strptime(auth, "%Y-%m-%d").date()
     else:
@@ -1307,26 +1312,25 @@ def clean_expired():
     if not sender.isAdmin():
         sender.reply("❌ 需要管理员权限")
         return
-    users = middleware.bucketAllKeys(f'{bucket_prefix}.user')
+    users = middleware.bucketAllKeys(f'{bucket_prefix}_user')
     cleaned = 0
     for user in users:
-        accounts = eval(middleware.bucketGet(f'{bucket_prefix}.user', user) or '[]')
+        accounts = eval(middleware.bucketGet(f'{bucket_prefix}_user', user) or '[]')
         valid = []
         for account in accounts:
-            auth = middleware.bucketGet(f'{bucket_prefix}.auth', account)
+            auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
             if not auth or auth <= str(datetime.now().date()):
-                middleware.bucketDel(f'{bucket_prefix}.token', account)
-                middleware.bucketDel(f'{bucket_prefix}.auth', account)
-                middleware.bucketDel(f'{bucket_prefix}.env_id', account)
+                middleware.bucketDel(f'{bucket_prefix}_token', account)
+                middleware.bucketDel(f'{bucket_prefix}_auth', account)
+                middleware.bucketDel(f'{bucket_prefix}_env_id', account)
                 cleaned += 1
             else:
                 valid.append(account)
         if valid:
-            middleware.bucketSet(f'{bucket_prefix}.user', user, str(valid))
+            middleware.bucketSet(f'{bucket_prefix}_user', user, str(valid))
         else:
-            middleware.bucketDel(f'{bucket_prefix}.user', user)
+            middleware.bucketDel(f'{bucket_prefix}_user', user)
     sender.reply(f"✅ 已清理 {cleaned} 个过期账号")
-
 
 
 def retry_on_error(func, retries=3, delay=1):
@@ -1356,11 +1360,11 @@ def log_operation(operation, user, account, status, message=''):
             'status': status,
             'message': message
         }
-        logs = eval(middleware.bucketGet(f'{bucket_prefix}.logs', 'operations') or '[]')
+        logs = eval(middleware.bucketGet(f'{bucket_prefix}_logs', 'operations') or '[]')
         logs.append(log)
         if len(logs) > 1000:  # 只保留最近1000条
             logs = logs[-1000:]
-        middleware.bucketSet(f'{bucket_prefix}.logs', 'operations', str(logs))
+        middleware.bucketSet(f'{bucket_prefix}_logs', 'operations', str(logs))
     except Exception as e:
         print(f"记录日志失败: {str(e)}")
 
@@ -1396,20 +1400,20 @@ def admin_auth():
 def update_qinglong_env():
     """更新全部青龙环境变量"""
     sender.reply("正在更新全部账号的青龙环境变量...")
-    users = middleware.bucketAllKeys(f'{bucket_prefix}.user')
+    users = middleware.bucketAllKeys(f'{bucket_prefix}_user')
     total_users = len(users)
     total_accounts = 0
     success = 0
     failed = 0
     for user in users:
-        accounts = eval(middleware.bucketGet(f'{bucket_prefix}.user', user) or '[]')
+        accounts = eval(middleware.bucketGet(f'{bucket_prefix}_user', user) or '[]')
         for account in accounts:
             total_accounts += 1
-            try:   
-                token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+            try:
+                token = middleware.bucketGet(f'{bucket_prefix}_token', account)
                 if token:
                     add_to_qinglong(token, account, user)
-                env_ids_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+                env_ids_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                 if env_ids_str:
                     env_ids = json.loads(env_ids_str)
                     enable_in_qinglong(env_ids)
@@ -1423,7 +1427,6 @@ def update_qinglong_env():
 ✅ 成功: {success}个账号
 ❌ 失败: {failed}个账号
 ==================""")
-
 
 
 def auth_all_users():
@@ -1442,19 +1445,19 @@ def auth_all_users():
         days = int(days)
         if days <= 0:
             raise ValueError()
-        users = middleware.bucketAllKeys(f'{bucket_prefix}.user')
+        users = middleware.bucketAllKeys(f'{bucket_prefix}_user')
         success = 0
         failed = 0
         for user in users:
-            accounts = eval(middleware.bucketGet(f'{bucket_prefix}.user', user) or '[]')
+            accounts = eval(middleware.bucketGet(f'{bucket_prefix}_user', user) or '[]')
             for account in accounts:
                 try:
                     auth_time = calculate_auth_time(account, days / 30)
-                    middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
-                    token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+                    middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+                    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
                     if token:
                         add_to_qinglong(token, account, user)
-                    env_ids_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+                    env_ids_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                     if env_ids_str:
                         env_ids = json.loads(env_ids_str)
                         enable_in_qinglong(env_ids)
@@ -1486,7 +1489,7 @@ def auth_specific_user():
     user_id = sender.listen(60000)
     if not user_id or user_id == 'q':
         return
-    accounts = eval(middleware.bucketGet(f'{bucket_prefix}.user', user_id) or '[]')
+    accounts = eval(middleware.bucketGet(f'{bucket_prefix}_user', user_id) or '[]')
     if not accounts:
         sender.reply("❌ 未找到该用户的账号")
         return
@@ -1496,7 +1499,7 @@ def auth_specific_user():
 [01] 修改全部账号授权
 ----------------"""
     for i, account in enumerate(accounts, 1):
-        auth = middleware.bucketGet(f'{bucket_prefix}.auth', account)
+        auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
         status = "✅ 已授权" if auth and auth > today else "❌ 未授权"
         account_list += f"\n[{i}] {mask_phone(account)}\n    {status}"
     account_list += """
@@ -1528,11 +1531,11 @@ def auth_specific_user():
         for account in accounts:
             try:
                 auth_time = calculate_auth_time(account, days / 30)
-                middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
-                token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+                middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+                token = middleware.bucketGet(f'{bucket_prefix}_token', account)
                 if token:
                     add_to_qinglong(token, account, user_id)
-                env_ids_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+                env_ids_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                 if env_ids_str:
                     env_ids = json.loads(env_ids_str)
                     enable_in_qinglong(env_ids)
@@ -1556,19 +1559,19 @@ def auth_specific_user():
         # 验证日期格式必须为 YYYY-MM-DD
         date_pattern = r'^\d{4}-\d{2}-\d{2}$'
         if not re.match(date_pattern, new_auth):
-                sender.reply("❌ 日期格式错误！请使用格式：2025-01-01")
-                return
+            sender.reply("❌ 日期格式错误！请使用格式：2025-01-01")
+            return
         try:
             datetime.strptime(new_auth, '%Y-%m-%d')
         except ValueError:
             sender.reply("❌ 无效的日期！请检查输入的日期是否正确")
             return
         for account in accounts:
-            middleware.bucketSet(f'{bucket_prefix}.auth', account, new_auth)
-            token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+            middleware.bucketSet(f'{bucket_prefix}_auth', account, new_auth)
+            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
             if token:
                 add_to_qinglong(token, account, user_id)
-            env_ids_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+            env_ids_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
             if env_ids_str:
                 env_ids = json.loads(env_ids_str)
                 enable_in_qinglong(env_ids)
@@ -1593,11 +1596,11 @@ def auth_specific_user():
                 raise ValueError()
             account = accounts[index]
             auth_time = calculate_auth_time(account, days / 30)
-            middleware.bucketSet(f'{bucket_prefix}.auth', account, auth_time)
-            token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
             if token:
                 add_to_qinglong(token, account, user_id)
-            env_ids_str = middleware.bucketGet(f'{bucket_prefix}.env_id', account)
+            env_ids_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
             if env_ids_str:
                 env_ids = json.loads(env_ids_str)
                 enable_in_qinglong(env_ids)
@@ -1613,27 +1616,26 @@ def auth_specific_user():
             log_operation('auth', user_id, account, 'failed', str(e))
 
 
-
 def delete_account(account):
     """删除账号"""
     try:
         if not delete_from_qinglong(account):
             raise Exception("从青龙删除变量失败")
-        middleware.bucketDel(f'{bucket_prefix}.token', account)
-        middleware.bucketDel(f'{bucket_prefix}.auth', account)
-        middleware.bucketDel(f'{bucket_prefix}.env_id', account)
+        middleware.bucketDel(f'{bucket_prefix}_token', account)
+        middleware.bucketDel(f'{bucket_prefix}_auth', account)
+        middleware.bucketDel(f'{bucket_prefix}_env_id', account)
 
         # 安全解析用户列表
         try:
             accounts = eval(uservalue or "[]")
         except (json.JSONDecodeError, TypeError) as e:
             print(f"用户列表解析失败: {str(e)}")
-        
+
         # 校验账号存在性并更新
         if account in accounts:
             accounts.remove(account)
             try:
-                middleware.bucketSet(f'{bucket_prefix}.user', userid, json.dumps(accounts, ensure_ascii=False))
+                middleware.bucketSet(f'{bucket_prefix}_user', userid, json.dumps(accounts, ensure_ascii=False))
             except Exception as e:
                 raise Exception(f"用户列表更新失败: {str(e)}")
         sender.reply(f"""
@@ -1649,9 +1651,10 @@ def delete_account(account):
         log_operation('delete_account', userid, account, 'failed', str(e))
         return False
 
+
 def show_ck(account):
     """查看账号ck"""
-    token = middleware.bucketGet(f'{bucket_prefix}.token', account)
+    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
     if token:
         sender.reply(f"""
 ====={full_scripts_name}账号ck=====
@@ -1692,7 +1695,7 @@ def main():
         manage_accounts()
     elif '查询' in message:
         query()
-    elif '教程' in message:
+    elif '教程' in message or "太平洋" in message:
         tutorial()
     elif message == f'{scripts_name}清理':
         clean_expired()
