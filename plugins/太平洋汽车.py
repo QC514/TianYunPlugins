@@ -847,8 +847,7 @@ def manage_accounts():
         return
 
     # 账号列表构建
-    account_list = """
-=====账号列表=====
+    account_list = """=====账号列表=====
 批量操作:
 [00] 授权全部账号
 [01] 删除全部账号
@@ -1080,8 +1079,7 @@ def auth_account(account):
 ==================""")
             return True
         if month_coin <= 0:
-            auth_guide = """
-=====授权方式=====
+            auth_guide = """=====授权方式=====
 [1] 微信支付
 ------------------
 💰 现金比例: {price}元/30天
@@ -1357,8 +1355,7 @@ def admin_auth():
     if not sender.isAdmin():
         sender.reply("❌ 需要管理员权限")
         return
-    auth_menu = """
-=====授权管理=====
+    auth_menu = """=====授权管理=====
 [1] 一键授权所有用户
 [2] 指定用户授权
 [3] 更新青龙环境变量
@@ -1474,8 +1471,7 @@ def auth_specific_user():
     if not accounts:
         sender.reply("❌ 未找到该用户的账号")
         return
-    account_list = """
-=====账号列表=====
+    account_list = """=====账号列表=====
 [00] 授权全部账号
 [01] 修改全部账号授权
 ----------------"""
@@ -1483,8 +1479,7 @@ def auth_specific_user():
         auth = middleware.bucketGet(f'{bucket_prefix}_auth', account)
         status = "✅ 已授权" if auth and auth > today else "❌ 未授权"
         account_list += f"\n[{i}] {mask_phone(account)}\n    {status}"
-    account_list += """
-------------------
+    account_list += """------------------
 回复数字选择账号
 回复"q"退出"""
     sender.reply(account_list)
