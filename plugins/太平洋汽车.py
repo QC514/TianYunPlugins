@@ -1668,7 +1668,7 @@ def main():
         manage_accounts()
     elif '查询' in message:
         query()
-    elif '教程' in message or "太平洋" in message:
+    elif '教程' in message or "太平洋" == message:
         tutorial()
     elif message == f'{scripts_name}清理':
         clean_expired()
