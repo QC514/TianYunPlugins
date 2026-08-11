@@ -11,17 +11,14 @@
 # [platform: all] 适用的平台
 # [open_source: false]是否开源
 # [icon: https://pp.myapp.com/ma_icon/0/icon_4848_1772677983/256]图标链接地址，请使用48像素的正方形图标，支持http和https
-# [version: 1.0.1]版本号
+# [version: 1.5.0]版本号
 # [public: true] 是否发布？值为true或false，不设置则上传aut云时会自动设置为true，false时上传后不显示在市场中，但是搜索能搜索到，方便开发者测试
 # [price: 18.88] 上架价格
-# [description: 适配作者：YSJohnson的太平洋汽车脚本。ck提交青龙。格式“账号#密码#openid”。<br>指令：太平洋（登录|查询|管理|授权|清理|教程）<br>1.4.0更新：修复查询显示问题；<br>1.3.0更新：优化查询显示；<br>1.1.0更新：账号管理增加扫码获取提现参数openid，实现自动提现；<br>1.0.0初版：支持批量ck登录，支持代理。] 使用方法尽量写具体
+# [description: 适配作者：YSJohnson的太平洋汽车脚本。ck提交青龙。格式“账号#密码#openid”。<br>指令：太平洋（登录|查询|管理|授权|清理|教程）<br>1.5.0更新：授权支付接入清蕴支付 start_checkout（参考幸运星/饿了么）；<br>1.4.0更新：修复查询显示问题；<br>1.3.0更新：优化查询显示；<br>1.1.0更新：账号管理增加扫码获取提现参数openid，实现自动提现；<br>1.0.0初版：支持批量ck登录，支持代理。] 使用方法尽量写具体
 
-# [param: {"required":true,"key":"qingyun_config.zsm","bool":false,"placeholder":"示例: http://10.10.10.10:8080/zsm.jpg","name":"收款码地址","desc":"赞赏码或收款码地址"}]
 # [param: {"required":true,"key":"qingyun_tpyqc.ql_config","bool":false,"placeholder":"http://xx.xx.xx.xx:xxxx|xxx|xxx","name":"对接青龙","desc":"http://ip:端口丨ClientID丨ClientSecret"}]
 # [param: {"required":false,"key":"qingyun_tpyqc.var_name","bool":false,"placeholder":"m_tpyqc","name":"环境变量名","desc":"青龙容器内的变量名，默认为：m_tpyqc"}]
-# [param: {"required":false,"key":"qingyun_tpyqc.price","bool":false,"placeholder":"1","name":"上车价格","desc":"上车价格(单位:元)/30天"}]
-# [param: {"required":false,"key":"qingyun_tpyqc.coin","bool":false,"placeholder":"不填为关闭状态","name":"积分开通","desc":"授权一个月的积分，只能为整数"}]
-# [param: {"required":false,"key":"qingyun_tpyqc.coin_bucket","bool":false,"placeholder":"","name":"积分数据桶","desc":"默认使用dd_sign_points"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.price","bool":false,"placeholder":"1","name":"上车价格","desc":"上车价格(单位:元)/30天，支付走清蕴支付统一收银台"}]
 # [param: {"required":false,"key":"qingyun_tpyqc.is_proxy","bool":true,"placeholder":"","name":"是否启用代理","desc":"true/false"}]
 # [param: {"required":false,"key":"qingyun_tpyqc.proxy_pool","bool":false,"placeholder":"http://代理池API地址","name":"代理池地址","desc":"代理API服务地址"}]
 
@@ -32,6 +29,7 @@ bucket_prefix = "qingyun_tpyqc"
 from datetime import datetime, timedelta  # 操作日期、时间以及时间间隔
 # from typing import Self
 import middleware  # autman的中间件
+import qingyun_payment  # 清蕴支付统一收银台
 from decimal import Decimal  # 处理浮点数
 import time  # 处理时间
 import json  # 处理json数据
@@ -650,15 +648,7 @@ def get_config():
             print("价格配置无效，使用默认值: 1")
             price = Decimal('1')
             middleware.bucketSet(bucket_prefix, 'price', '1')
-        try:
-            coin_price = int(middleware.bucketGet(bucket_prefix, 'coin') or '0')
-            if coin_price < 0:
-                raise ValueError("积分不能为负数")
-        except ValueError:
-            print("积分配置无效，使用默认值: 0")
-            coin_price = 0
-            middleware.bucketSet(bucket_prefix, 'coin', '0')
-        return (var_name, ql_host, ql_client_id, ql_client_secret, manage_cmd, query_cmd, login_cmd, price, coin_price)
+        return (var_name, ql_host, ql_client_id, ql_client_secret, manage_cmd, query_cmd, login_cmd, price)
     except Exception as e:
         error_msg = f"获取配置失败: {str(e)}"
         print(error_msg)
@@ -885,8 +875,8 @@ def manage_accounts():
             for account in accounts:
                 show_ck(account)
         elif choice == '00':
-            # 批量授权逻辑
-            sender.reply("📝 请输入授权天数(如使用积分兑换，必须为30的倍数):")
+            # 批量授权逻辑（支付接入清蕴支付 start_checkout）
+            sender.reply("📝 请输入授权天数:")
             days = sender.listen(60000)
             if not days:
                 sender.reply("❌ 操作超时")
@@ -894,94 +884,38 @@ def manage_accounts():
             elif days == 'q' or days == 'Q':
                 sender.reply("✅ 已取消授权")
                 return
-            # 新增配置获取（修复积分显示问题）
-            coin_bucket = middleware.bucketGet(bucket_prefix, 'coin_bucket') or 'dd_sign_points'
-            coin_price = int(middleware.bucketGet(bucket_prefix, 'coin') or '0')  # 确保获取最新积分价格
             try:
                 days = int(days)
                 if days <= 0:
                     raise ValueError("天数必须大于0")
 
-                # 支付方式选择
-                pay_choice = '1'
-                if coin_price > 0:
-                    user_coin = Decimal(middleware.bucketGet('coin_bucket', userid) or '0')
-                    auth_guide = f"""=====批量授权方式=====
-[1] 微信支付
-[2] 积分支付 (当前积分: {user_coin})
---------------------
-💰 积分比例: {coin_price}积分/月
-回复数字选择方式"""
-                    sender.reply(auth_guide)
-                    pay_choice = sender.listen(60000)
-                    if pay_choice not in ['1', '2']:
-                        sender.reply("❌ 无效的支付方式")
+                amount = price * (Decimal(days) / Decimal(30)) * len(accounts)
+                amount = amount.quantize(Decimal('0.01'), rounding='ROUND_UP')
+
+                if amount > 0:
+                    if not process_payment(amount, days, account_count=len(accounts)):
                         return
 
-                # 微信支付处理
-                if pay_choice == '1':
-                    amount = price * (Decimal(days) / 30) * len(accounts)
-                    amount = amount.quantize(Decimal('0.01'), rounding='ROUND_UP')
-                    if process_payment(amount, days):
-                        success_count = 0
-                        for account in accounts:
-                            auth_time = calculate_auth_time(account, days / 30)
-                            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
-                            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+                success_count = 0
+                for account in accounts:
+                    auth_time = calculate_auth_time(account, days / 30)
+                    middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+                    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+                    if token:
+                        add_to_qinglong(token, account, userid)
+                    success_count += 1
 
-                            if token:
-                                add_to_qinglong(token, account, userid)
-                            success_count += 1
-                        sender.reply(f"""=====批量授权成功=====
-💰 支付: {amount}元
-⏰ 时长: {days}天
-✅ 成功: {success_count}个账号
-====================""")
-
-                # 积分支付处理
-                elif pay_choice == '2':
-                    coin_bucket = middleware.bucketGet(bucket_prefix, 'coin_bucket') or 'dd_sign_points'
-                    user_coin = Decimal(middleware.bucketGet(coin_bucket, userid) or '0')
-                    months = days / 30
-                    if months != int(months):
-                        sender.reply("❌ 积分支付需整月授权")
-                        return
-                    months = int(months)
-                    need_coin = coin_price * months * len(accounts)
-                    if user_coin < need_coin:
-                        sender.reply(f"""=====积分不足=====
-❌ 积分余额不足
-------------------
-💰 所需积分: {need_coin}
-💵 当前积分: {user_coin}
-====================""")
-                        return
-
-                    new_coin = int(user_coin - need_coin)
-                    middleware.bucketSet(coin_bucket, userid, str(new_coin))
-                    success_count = 0
-                    for account in accounts:
-                        auth_time = calculate_auth_time(account, months)
-                        middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
-                        token = middleware.bucketGet(f'{bucket_prefix}_token', account)
-
-                        if token:
-                            add_to_qinglong(token, account, userid)
-                        success_count += 1
-                    sender.reply(f"""=====批量授权成功=====
-💰 消耗: {need_coin}积分
-⏰ 时长: {days}天
-✅ 成功: {success_count}个账号
-💵 剩余: {new_coin}积分
-====================""")
-
-                # 更新青龙状态
                 for account in accounts:
                     env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
                     if env_id_str:
                         env_ids = json.loads(env_id_str)
                         enable_in_qinglong(env_ids)
 
+                pay_line = f"💰 支付: {amount}元\n" if amount > 0 else ""
+                sender.reply(f"""=====批量授权成功=====
+{pay_line}⏰ 时长: {days}天
+✅ 成功: {success_count}个账号
+====================""")
             except ValueError as ve:
                 sender.reply(f"❌ 无效的输入: {str(ve)}")
             except Exception as e:
@@ -1039,14 +973,9 @@ def show_account_menu(account):
 
 
 def auth_account(account):
-    """账号授权"""
+    """账号授权（支付接入清蕴支付 start_checkout）"""
     try:
-        # 从配置获取积分桶名称
         price = Decimal(middleware.bucketGet(bucket_prefix, 'price') or '1')  # 每月价格
-        coin_bucket = middleware.bucketGet(bucket_prefix, 'coin_bucket') or 'dd_sign_points'
-        user_coin = middleware.bucketGet(coin_bucket, userid) or '0'
-        user_coin = Decimal(user_coin)  # 使用 Decimal 处理大数值
-        month_coin = Decimal(coin_price)  # 从配置获取每月所需积分
 
         if price == 0:
             sender.reply("📝 请输入授权天数:")
@@ -1060,155 +989,31 @@ def auth_account(account):
             days = int(days)
             if days <= 0:
                 raise ValueError()
-            auth_time = calculate_auth_time(account, days / 30)
-            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
-            # 新增强制更新青龙变量逻辑
-            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
-            if token:
-                add_to_qinglong(token, account, userid)  # 强制更新变量
-            else:
-                sender.reply("⚠️ token获取失败，请联系管理员")
-            env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
-            if env_id_str:
-                env_ids = json.loads(env_id_str)
-                enable_in_qinglong(env_ids)
-            sender.reply(f"""=====授权成功=====
-📱 账号: {mask_phone(account)}
-⏰ 时长: {days}天
-📅 到期: {auth_time}
-==================""")
-            return True
-        if month_coin <= 0:
-            auth_guide = """=====授权方式=====
-[1] 微信支付
-------------------
-💰 现金比例: {price}元/30天
-回复数字选择方式
-回复"q"退出"""
-        else:
-            auth_guide = f"""=====授权方式=====
-[1] 微信支付
-[2] 积分支付 (当前积分: {user_coin})
-------------------
-💰 现金比例: {price}元/30天
-🌸 积分比例: {month_coin}积分/月
-回复数字选择方式
-回复"q"退出"""
-        sender.reply(auth_guide)
-        choice = sender.listen(60000)
-        if not choice:
+            return finalize_account_auth(account, days, amount=None)
+
+        sender.reply(f"📝 请输入授权天数（{price}元/30天，支付走清蕴支付）:")
+        days = sender.listen(60000)
+        if not days:
             sender.reply("❌ 操作超时")
             return False
-        elif choice == 'q':
+        elif days == 'q':
             sender.reply("✅ 已取消授权")
             return False
-        if choice == '1':
-            sender.reply("📝 请输入授权天数:")
-            days = sender.listen(60000)
-            if not days:
-                sender.reply("❌ 操作超时")
-                return False
-            elif days == 'q':
-                sender.reply("✅ 已取消授权")
-                return False
-            days = int(days)
-            if days <= 0:
-                raise ValueError()
-            amount = price * (Decimal(days) / Decimal(30))
-            amount = Decimal(str(amount)).quantize(Decimal('0.01'), rounding='ROUND_UP')
+        days = int(days)
+        if days <= 0:
+            raise ValueError()
 
-            if amount == 0:
-                auth_time = calculate_auth_time(account, days / 30)
-                middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
-                # 新增强制更新青龙变量逻辑
-                token = middleware.bucketGet(f'{bucket_prefix}_token', account)
-                if token:
-                    add_to_qinglong(token, account, userid)  # 强制更新变量
-                else:
-                    sender.reply("⚠️ 令牌获取失败，请联系管理员")
-                env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
-                if env_id_str:
-                    env_ids = json.loads(env_id_str)
-                    enable_in_qinglong(env_ids)
-                sender.reply(f"""=====授权成功=====
-📱 账号: {mask_phone(account)}
-⏰ 时长: {days}天
-📅 到期: {auth_time}
-==================""")
-                return True
+        amount = price * (Decimal(days) / Decimal(30))
+        amount = Decimal(str(amount)).quantize(Decimal('0.01'), rounding='ROUND_UP')
 
-            if amount != 0:
-                payment_success = process_payment(amount, days)  # 处理支付
-                if payment_success:  # 只有在支付成功的情况下才进行授权
-                    auth_time = calculate_auth_time(account, days / 30)
-                    middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
-                    # 新增强制更新青龙变量逻辑
-                    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
-                    if token:
-                        add_to_qinglong(token, account, userid)  # 强制更新变量
-                    else:
-                        sender.reply("⚠️ 令牌获取失败，请联系管理员")
-                    env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
-                    if env_id_str:
-                        env_ids = json.loads(env_id_str)
-                        enable_in_qinglong(env_ids)
-                    sender.reply(f"""    =====授权成功=====
-    📱 账号: {mask_phone(account)}
-    💰 支付: {amount}元
-    ⏰ 时长: {days}天
-    📅 到期: {auth_time}
-    ==================""")
-                    return True
-                else:
-                    sender.reply("❌ 支付未成功，授权未完成")
-                    return False
-        elif choice == '2' and month_coin > 0:  # 只有积分支付开启时才处理
-            sender.reply("📝 授权月数:")
-            months = sender.listen(60000)
-            if not months:
-                sender.reply("❌ 操作超时")
-                return False
-            elif months == 'q':
-                sender.reply("✅ 已取消授权")
-                return False
-            months = int(months)
-            if months <= 0:
-                raise ValueError()
-            need_coin = month_coin * months
-            if user_coin < need_coin:
-                sender.reply(f"""=====积分不足=====
-❌ 积分余额不足
-------------------
-💰 所需积分: {need_coin}
-💵 当前积分: {user_coin}
-==================""")
-                return False
-            new_coin = int(user_coin - need_coin)
-            middleware.bucketSet(coin_bucket, userid, str(new_coin))
-            auth_time = calculate_auth_time(account, months)
-            middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
-            token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+        if amount == 0:
+            return finalize_account_auth(account, days, amount=None)
 
-            if token:
-                add_to_qinglong(token, account, userid)  # 强制更新变量
-            else:
-                sender.reply("⚠️ 令牌获取失败，请联系管理员")
-
-            env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
-            if env_id_str:
-                env_ids = json.loads(env_id_str)
-                enable_in_qinglong(env_ids)
-            sender.reply(f"""=====授权成功=====
-📱 账号: {mask_phone(account)}
-💰 消耗: {need_coin}积分
-⏰ 时长: {months}月
-📅 到期: {auth_time}
-------------------
-💵 剩余: {new_coin}积分
-==================""")
-            return True
-        else:
-            sender.reply("❌ 无效的选择")
+        payment_success = process_payment(amount, days, account_count=1)
+        if payment_success:
+            return finalize_account_auth(account, days, amount=amount)
+        sender.reply("❌ 支付未成功，授权未完成")
+        return False
     except ValueError:
         sender.reply("❌ 无效的数值")
     except Exception as e:
@@ -1216,63 +1021,73 @@ def auth_account(account):
     return False
 
 
-def process_payment(amount, days):
-    """处理支付"""
-    if amount == 0:
-        return True
-    zsm = middleware.bucketGet('qingyun_config', 'zsm')
-    if not zsm:
-        sender.reply("❌ 未配置收款码")
-        return False
-    zfzt = sender.atWaitPay()
-    if zfzt:
-        sender.reply('当前有人正在支付,请稍后再试！')
-        exit(0)
-    pay_msg = f"""=====微信扫码支付====
-🎫 商品: {full_scripts_name}授权
-📅 时长: {days}天
-💰 金额: {amount}元
-------------------
-请使用微信扫码支付
-回复"q"取消支付
-=================="""
-    sender.reply(pay_msg)
-    sender.replyImage(zsm)
-    result = sender.waitPay("q", 100000)
-    if not result:
-        sender.reply("❌ 支付超时")
-        return False
-    elif result == 'q':
-        sender.reply("✅ 已取消支付")
-        return False
+def finalize_account_auth(account, days, amount=None):
+    """支付成功或免费授权后统一生效"""
+    auth_time = calculate_auth_time(account, days / 30)
+    middleware.bucketSet(f'{bucket_prefix}_auth', account, auth_time)
+    token = middleware.bucketGet(f'{bucket_prefix}_token', account)
+    if token:
+        add_to_qinglong(token, account, userid)
+    else:
+        sender.reply("⚠️ 令牌获取失败，请联系管理员")
+    env_id_str = middleware.bucketGet(f'{bucket_prefix}_env_id', account)
+    if env_id_str:
+        env_ids = json.loads(env_id_str)
+        enable_in_qinglong(env_ids)
+
+    pay_line = f"💰 支付: {amount}元\n" if amount is not None else ""
+    sender.reply(f"""=====授权成功=====
+📱 账号: {mask_phone(account)}
+{pay_line}⏰ 时长: {days}天
+📅 到期: {auth_time}
+==================""")
+    return True
+
+
+def process_payment(amount, days, account_count=1):
+    """处理支付：接入清蕴支付统一收银台（参考幸运星/饿了么）"""
     try:
-        if isinstance(result, str):
-            result = json.loads(result)
-        if 'Money' in result:
-            paid_amount = Decimal(str(result.get('Money', 0)))
-            pay_time = result.get('Time', '')
-            pay_from = ''
-        else:
-            paid_amount = Decimal(str(result.get('money', 0)))
-            pay_time = result.get('Time', '')
-            pay_from = result.get('FromName', '')
-        if paid_amount >= amount:
-            return True
-        else:
-            sender.reply(f"""=====支付失败=====
+        amount = float(Decimal(str(amount)).quantize(Decimal('0.01'), rounding='ROUND_UP'))
+    except Exception:
+        sender.reply("❌ 支付金额无效")
+        return False
+
+    if amount <= 0:
+        return True
+
+    header_extra = (
+        f"🎫 商品: {full_scripts_name}授权\n"
+        f"📅 时长: {days}天\n"
+        f"👥 账号数: {account_count}"
+    )
+    pay_res = qingyun_payment.QingyunCompletePayment.start_checkout(
+        sender=sender,
+        amount=amount,
+        title=f"{full_scripts_name}授权",
+        order_name=f"{full_scripts_name}授权",
+        user_id=str(userid),
+        header_extra=header_extra,
+    )
+    if not isinstance(pay_res, dict) or pay_res.get("code") != 0:
+        return False
+
+    try:
+        paid_money = float(pay_res.get("paid_money", amount) or amount)
+    except Exception:
+        paid_money = amount
+
+    # 宽松校验：实付不低于应付（账单偏移等场景由支付插件内部处理）
+    if paid_money + 1e-6 < amount:
+        sender.reply(
+            f"""=====支付失败=====
 ❌ 支付金额不足
 ------------------
 💰 应付: {amount}元
-💵 实付: {paid_amount}元
-==================""")
-            return False
-    except Exception as e:
-        sender.reply(f"""=====支付异常=====
-❌ 支付验证失败
-------------------
-⚠️ 错误: {str(e)}
-==================""")
+💵 实付: {paid_money}元
+=================="""
+        )
         return False
+    return True
 
 
 def calculate_auth_time(account, months):
@@ -1681,7 +1496,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        var_name, ql_host, ql_client_id, ql_client_secret, manage_cmd, query_cmd, login_cmd, price, coin_price = get_config()
+        var_name, ql_host, ql_client_id, ql_client_secret, manage_cmd, query_cmd, login_cmd, price = get_config()
         ql_url, ql_token = init_qinglong()
         imtype = sender.getImtype()
         today = str(datetime.now().date())
