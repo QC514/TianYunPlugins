@@ -14,7 +14,7 @@
 # [public: false]
 # [price: 0]
 # [icon: https://i.mji.rip/2025/07/11/2350538ac014afbea48b64409bd5931c.png]
-# [description: 芳华未来账号管理插件。支持短信验证码登录获取 AppToken、账号查询、清蕴支付授权、账号管理和提交青龙。查询显示昵称、手机号、签到状态、今日增加和当前芳华。<br>指令：芳华（登录|查询|管理|教程）。<br>青龙环境变量固定为 qingyun_fh，值为纯 Token；备注写入手机号、所属用户和授权时间。<br>1.2.1：移除密码登录与双 Token 缓存，统一短信登录纯 Token。]
+# [description: 芳华未来账号管理插件。支持短信验证码登录获取 AppToken、账号查询、清蕴支付授权、账号管理和提交青龙。查询显示昵称、手机号、签到状态、今日增加和当前芳华。<br>指令：芳华（登录|查询|管理|教程）。<br>青龙环境变量固定为 qingyun_fh，值为纯 Token；备注写入手机号、所属用户和授权时间。<br>1.2.3：删除明文请求旧逻辑，接口仅走加密协议。<br>1.2.2：修复 sendCode 因缺少 pycryptodome 走明文导致 401；补 cryptography 加密兜底。<br>1.2.1：移除密码登录与双 Token 缓存，统一短信登录纯 Token。]
 # [param: {"required":true,"key":"qingyun_fanghua.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
 # [param: {"required":false,"key":"qingyun_fanghua.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
 # [param: {"required":false,"key":"qingyun_fanghua.is_proxy","bool":true,"placeholder":"","name":"启用代理","desc":"是否为芳华接口启用代理"}]
@@ -44,9 +44,17 @@ try:
     from Crypto.PublicKey import RSA
     from Crypto.Util.Padding import pad, unpad
 
-    HAS_CRYPTO = True
+    CRYPTO_BACKEND = "pycryptodome"
 except ImportError:
-    HAS_CRYPTO = False
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import padding as asymmetric_padding
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from cryptography.hazmat.primitives.padding import PKCS7
+
+        CRYPTO_BACKEND = "cryptography"
+    except ImportError:
+        CRYPTO_BACKEND = None
 
 
 SCRIPT_NAME = "芳华"
@@ -111,41 +119,65 @@ class FanghuaCrypto:
     """实现芳华 App 使用的 AES/RSA 混合加密。"""
 
     def __init__(self) -> None:
+        self.backend = CRYPTO_BACKEND
         self.public_key = None
         self.private_key = None
-        if HAS_CRYPTO:
-            try:
-                self.public_key = RSA.import_key(base64.b64decode(RSA_PUBLIC_KEY_B64))
-                self.private_key = RSA.import_key(base64.b64decode(APP_RSA_PRIVATE_KEY_B64))
-            except (ValueError, TypeError, IndexError):
-                self.public_key = None
-                self.private_key = None
+        if not self.backend:
+            return
+        try:
+            public_der = base64.b64decode(RSA_PUBLIC_KEY_B64)
+            private_der = base64.b64decode(APP_RSA_PRIVATE_KEY_B64)
+            if self.backend == "pycryptodome":
+                self.public_key = RSA.import_key(public_der)
+                self.private_key = RSA.import_key(private_der)
+            else:
+                self.public_key = serialization.load_der_public_key(public_der)
+                self.private_key = serialization.load_der_private_key(private_der, password=None)
+        except Exception:
+            self.backend = None
+            self.public_key = None
+            self.private_key = None
 
     @property
     def enabled(self) -> bool:
-        return self.public_key is not None and self.private_key is not None
+        return bool(self.backend and self.public_key is not None and self.private_key is not None)
 
     @staticmethod
     def _aes_key() -> str:
         return "".join(random.choice(string.ascii_letters + string.digits) for _ in range(16))
 
-    @staticmethod
-    def _aes_encrypt(plaintext: str, aes_key: str) -> str:
+    def _aes_encrypt(self, plaintext: str, aes_key: str) -> str:
         key = aes_key.encode("utf-8")
-        cipher = AES.new(key, AES.MODE_CBC, key)
-        encrypted = cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
+        raw = plaintext.encode("utf-8")
+        if self.backend == "pycryptodome":
+            cipher = AES.new(key, AES.MODE_CBC, key)
+            encrypted = cipher.encrypt(pad(raw, AES.block_size))
+        else:
+            padder = PKCS7(128).padder()
+            padded = padder.update(raw) + padder.finalize()
+            encryptor = Cipher(algorithms.AES(key), modes.CBC(key)).encryptor()
+            encrypted = encryptor.update(padded) + encryptor.finalize()
         return base64.b64encode(encrypted).decode("utf-8")
 
-    @staticmethod
-    def _aes_decrypt(ciphertext: str, aes_key: str) -> str:
+    def _aes_decrypt(self, ciphertext: str, aes_key: str) -> str:
         key = aes_key.encode("utf-8")
-        cipher = AES.new(key, AES.MODE_CBC, key)
-        decrypted = unpad(cipher.decrypt(base64.b64decode(ciphertext)), AES.block_size)
+        raw = base64.b64decode(ciphertext)
+        if self.backend == "pycryptodome":
+            cipher = AES.new(key, AES.MODE_CBC, key)
+            decrypted = unpad(cipher.decrypt(raw), AES.block_size)
+        else:
+            decryptor = Cipher(algorithms.AES(key), modes.CBC(key)).decryptor()
+            padded = decryptor.update(raw) + decryptor.finalize()
+            unpadder = PKCS7(128).unpadder()
+            decrypted = unpadder.update(padded) + unpadder.finalize()
         return decrypted.decode("utf-8")
 
     def _sign(self, timestamp: int, aes_key: str) -> str:
         value = f"timestamp={timestamp}&aesKey={aes_key}".encode("utf-8")
-        encrypted = PKCS1_v1_5.new(self.public_key).encrypt(value)
+        if self.backend == "pycryptodome":
+            encrypted = PKCS1_v1_5.new(self.public_key).encrypt(value)
+        else:
+            encrypted = self.public_key.encrypt(value, asymmetric_padding.PKCS1v15())
         return base64.b64encode(encrypted).decode("utf-8")
 
     def encrypt_data(self, data: dict[str, Any], timestamp: int) -> tuple[str, str]:
@@ -161,10 +193,14 @@ class FanghuaCrypto:
         if not encrypted_key or not encrypted_data or self.private_key is None:
             return result
         try:
-            aes_key_bytes = PKCS1_v1_5.new(self.private_key).decrypt(
-                base64.b64decode(encrypted_key),
-                None,
-            )
+            raw_key = base64.b64decode(encrypted_key)
+            if self.backend == "pycryptodome":
+                aes_key_bytes = PKCS1_v1_5.new(self.private_key).decrypt(raw_key, None)
+            else:
+                try:
+                    aes_key_bytes = self.private_key.decrypt(raw_key, asymmetric_padding.PKCS1v15())
+                except ValueError:
+                    aes_key_bytes = None
             if not aes_key_bytes:
                 return result
             plaintext = self._aes_decrypt(encrypted_data, aes_key_bytes.decode("utf-8"))
@@ -279,10 +315,26 @@ def send_request(method: str, url: str, **kwargs: Any) -> requests.Response:
             if "proxies" not in kwargs:
                 kwargs["proxies"] = get_proxy()
             response = requests.request(method, url, **kwargs)
-            response.raise_for_status()
+            if response.status_code >= 400:
+                detail = ""
+                try:
+                    payload = response.json()
+                    if isinstance(payload, dict):
+                        detail = str(payload.get("msg") or payload.get("message") or "")
+                except Exception:
+                    detail = (response.text or "").strip()[:120]
+                message = f"{response.status_code} Client Error"
+                if detail:
+                    message += f"：{detail}"
+                message += f" for url: {response.url}"
+                raise requests.HTTPError(message, response=response)
             return response
         except requests.RequestException as exc:
             last_error = exc
+            # 业务性 401/重复请求等无需盲目重试
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status in {400, 401, 403, 404}:
+                break
             if attempt < MAX_RETRIES:
                 time.sleep(1)
     raise PluginError(f"请求失败：{last_error}")
@@ -308,6 +360,11 @@ def fanghua_request(
     phone: str = "",
 ) -> Any:
     """按芳华 App 协议加密请求并解密响应。"""
+    if not fanghua_crypto.enabled:
+        raise PluginError(
+            "芳华接口加密不可用：请安装 pycryptodome 或 cryptography 后重试"
+        )
+
     method = method.upper()
     timestamp = int(time.time() * 1000)
     headers = {
@@ -317,35 +374,30 @@ def fanghua_request(
         "AppVersion": "1.8.1",
         "AppVersionCode": "1810",
         "AppToken": app_token,
-        "Content-Type": "text/plain" if fanghua_crypto.enabled else "application/json;charset=UTF-8",
+        "Content-Type": "text/plain",
+        "X-Api-Nonce": "".join(random.choices(string.ascii_lowercase + string.digits, k=10)),
+        "X-Api-Timestamp": str(timestamp),
     }
+    if phone:
+        headers["X-Api-DeviceId"] = derive_device_id(phone)
+
     request_kwargs: dict[str, Any] = {"headers": headers}
-    if fanghua_crypto.enabled:
-        if phone:
-            headers["X-Api-DeviceId"] = derive_device_id(phone)
-        headers["X-Api-Nonce"] = "".join(
-            random.choices(string.ascii_lowercase + string.digits, k=10)
-        )
-        headers["X-Api-Timestamp"] = str(timestamp)
-        if method == "POST" and data is not None:
-            encrypted_body, signature = fanghua_crypto.encrypt_data(data, timestamp)
-            headers["X-Api-Sign"] = signature
-            request_kwargs["data"] = encrypted_body
-        elif method == "GET" and query_params is not None:
-            encrypted_params, signature = fanghua_crypto.encrypt_data(query_params, timestamp)
-            headers["X-Api-Sign"] = signature
-            request_kwargs["params"] = {"data": encrypted_params}
-    else:
-        request_kwargs["json"] = data
-        request_kwargs["params"] = query_params
+    if method == "POST" and data is not None:
+        encrypted_body, signature = fanghua_crypto.encrypt_data(data, timestamp)
+        headers["X-Api-Sign"] = signature
+        request_kwargs["data"] = encrypted_body
+    elif method == "GET" and query_params is not None:
+        encrypted_params, signature = fanghua_crypto.encrypt_data(query_params, timestamp)
+        headers["X-Api-Sign"] = signature
+        request_kwargs["params"] = {"data": encrypted_params}
 
     response = send_request(method, API_BASE + path, **request_kwargs)
     try:
         result = response.json()
     except ValueError as exc:
         raise PluginError(f"接口没有返回有效数据：{exc}") from exc
-    if fanghua_crypto.enabled:
-        result = fanghua_crypto.decrypt_response(result)
+
+    result = fanghua_crypto.decrypt_response(result)
     if isinstance(result, dict) and result.get("code") == 401:
         raise PluginError(result.get("msg") or "账号身份验证失败")
     return result
