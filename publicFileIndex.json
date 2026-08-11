@@ -1391,22 +1391,6 @@
   "admin": false,
   "disable": false
  },
- "plugins/[wqwlkj2985]_wqwl-粉象生活.py": {
-  "id": "wqwl-粉象生活",
-  "name": "wqwl-粉象生活",
-  "title": "wqwl-粉象生活",
-  "type": "python",
-  "path": "plugins/[wqwlkj2985]_wqwl-粉象生活.py",
-  "version": "v1.0.3",
-  "desc": "v1.0.3，新增临时签到，这一期只有七天，用户指令：粉象签到，管理员的已经放在粉象一键运行里面了<br>几个指令：粉象登录、粉象管理、粉象查询、粉象(全部)提现、粉象一键运行（管理员）、粉象授权（管理员）<br>每天需要运行指令粉象一键运行两次，一次开奖前（21:35），一次开奖后，可以使用autman计划任务自处理定时",
-  "rule": "^(粉象)(登录|管理|查询|一键运行|全部提现|提现|授权|签到)$",
-  "icon": "http://175.24.81.131:8044/admin/images/gallery/1771682713032996077.jpg",
-  "author": "wqwlkj2985",
-  "class": "工具类",
-  "public": true,
-  "admin": false,
-  "disable": false
- },
  "plugins/[xiaoqing]_O-资产查询.py": {
   "id": "O-资产查询",
   "name": "O-资产查询",
@@ -3247,22 +3231,6 @@
   "admin": false,
   "disable": false
  },
- "plugins/彼得_粉象生活.py": {
-  "id": "彼得_粉象生活",
-  "name": "彼得_粉象生活",
-  "title": "彼得_粉象生活",
-  "type": "python",
-  "path": "plugins/彼得_粉象生活.py",
-  "version": "V6.25",
-  "desc": "插件自带任务! 使用前请先配参。用户指令: 粉象上车,粉象管理,粉象查询,粉象教程；管理员指令: 粉象版本,粉象运行,粉象配置,粉象授权。运行在定时推送里面设置自动运行时间。建议每天21点前运行一次，22点左右运行一次!相关配置桶: bd_fxconfig 用户数据桶: bd_fxcks",
-  "rule": "^粉象(.*)$",
-  "icon": "https://zhengxin-pub.cdn.bcebos.com/logopic/3b7566ad294edf58d055f514ca1fbd79_fullsize.jpg?x-bce-process=image/resize,m_lfit,w_200",
-  "author": "Bidepan",
-  "class": "",
-  "public": true,
-  "admin": false,
-  "disable": false
- },
  "plugins/慧生活798_By.sky2022.py": {
   "id": "慧生活798_2",
   "name": "慧生活798_2",
@@ -4334,22 +4302,6 @@
   "public": true,
   "admin": false,
   "disable": false
- },
- "plugins/粉象生活（授权版）.py": {
-  "id": "粉象生活（授权版）",
-  "name": "粉象生活（授权版）",
-  "title": "粉象生活（授权版）",
-  "type": "python",
-  "path": "plugins/粉象生活（授权版）.py",
-  "version": "V6.26",
-  "desc": "《粉象插件指令说明》https://www.yuque.com/yuqueyonghulzdzov/ddxbk/mwehi1sxq06g1ffk?singleDoc#，插件自带任务! 使用前请先配参。用户指令: 粉象上车,粉象管理,粉象查询,粉象教程；管理员指令: 粉象版本,粉象运行,粉象配置。运行在定时推送里面设置自动运行时间。建议每天21点前运行一次，22点左右运行一次!",
-  "rule": "^粉象(.*)$",
-  "icon": "https://zhengxin-pub.cdn.bcebos.com/logopic/3b7566ad294edf58d055f514ca1fbd79_fullsize.jpg?x-bce-process=image/resize,m_lfit,w_200",
-  "author": "linzixuan",
-  "class": "",
-  "public": true,
-  "admin": false,
-  "disable": true
  },
  "plugins/线报猴.py": {
   "id": "线报猴",
