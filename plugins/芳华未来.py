@@ -2,18 +2,18 @@
 # [title: 芳华未来]
 # [language: python]
 # [class: 工具类]
-# [service: 68025408]
+# [service: 作者：qingyun]
 # [disable: false]
 # [admin: false]
 # [rule: ^芳华(.*)|(.*)芳华$]
 # [cron: 26 8,18 * * *]
-# [priority: 1]
+# [priority: 99]
 # [platform: all]
 # [open_source: false]
-# [version: 1.0.0]
+# [version: 1.2.1]
 # [public: false]
 # [price: 0]
-# [description: 芳华未来账号管理插件。支持短信验证码登录获取 AppToken、账号查询、清蕴支付授权、账号管理和提交青龙。查询显示昵称、手机号、签到状态、今日增加和当前芳华。<br>指令：芳华（登录|查询|管理|教程）。<br>青龙环境变量固定为 qingyun_fh，值为纯 Token；备注写入手机号、所属用户和授权时间。<br>1.2.0：接入清蕴支付收银台，登录改为官方 App 短信协议（sendCode/loginByPhone）获取 Token。]
+# [description: 芳华未来账号管理插件。支持短信验证码登录获取 AppToken、账号查询、清蕴支付授权、账号管理和提交青龙。查询显示昵称、手机号、签到状态、今日增加和当前芳华。<br>指令：芳华（登录|查询|管理|教程）。<br>青龙环境变量固定为 qingyun_fh，值为纯 Token；备注写入手机号、所属用户和授权时间。<br>1.2.1：移除密码登录与双 Token 缓存，统一短信登录纯 Token。]
 # [param: {"required":true,"key":"qingyun_fanghua.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
 # [param: {"required":false,"key":"qingyun_fanghua.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
 # [param: {"required":false,"key":"qingyun_fanghua.is_proxy","bool":true,"placeholder":"","name":"启用代理","desc":"是否为芳华接口启用代理"}]
@@ -191,44 +191,46 @@ def normalize_phone(phone: str) -> str:
 
 
 def is_app_token(value: str) -> bool:
-    """粗略判断是否为已保存的 AppToken。"""
+    """粗略判断是否为可直接使用的 AppToken。"""
     value = str(value or "").strip()
     if not value:
         return False
-    if "#" in value:
+    if "#" in value or " " in value:
         return False
     return len(value) >= 16
 
 
 def extract_token_value(raw: str) -> str:
-    """兼容旧版手机号#密码和新版纯 Token。"""
+    """提取纯 AppToken。"""
     raw = str(raw or "").strip()
-    if not raw:
-        return ""
-    if "#" not in raw:
-        return raw if is_app_token(raw) else ""
-    candidate = raw.split("#", 1)[1].strip()
-    if len(candidate) >= 20 and " " not in candidate and "#" not in candidate:
-        return candidate
-    return ""
+    return raw if is_app_token(raw) else ""
+
 
 def get_account_token(phone: str) -> str:
     """读取账号绑定的 AppToken。"""
-    raw = middleware.bucketGet(f"{BUCKET_PREFIX}_token", phone) or ""
-    token = extract_token_value(str(raw))
-    if token:
-        return token
-    cached = middleware.bucketGet(f"{BUCKET_PREFIX}_app_token", phone) or ""
-    return str(cached).strip()
+    phone = normalize_phone(phone)
+    for bucket in (f"{BUCKET_PREFIX}_token", f"{BUCKET_PREFIX}_app_token"):
+        token = extract_token_value(str(middleware.bucketGet(bucket, phone) or ""))
+        if token:
+            if bucket != f"{BUCKET_PREFIX}_token":
+                # 旧双桶数据迁移到主桶
+                middleware.bucketSet(f"{BUCKET_PREFIX}_token", phone, token)
+                middleware.bucketDel(f"{BUCKET_PREFIX}_app_token", phone)
+            return token
+    return ""
 
 
 def save_account_token(phone: str, app_token: str) -> None:
-    """保存纯 Token，并同步 app_token 缓存。"""
+    """只保存一份纯 Token。"""
+    phone = normalize_phone(phone)
     app_token = str(app_token or "").strip()
     if not app_token:
         raise PluginError("保存失败：Token 为空")
+    if not is_app_token(app_token):
+        raise PluginError("保存失败：Token 格式无效")
     middleware.bucketSet(f"{BUCKET_PREFIX}_token", phone, app_token)
-    middleware.bucketSet(f"{BUCKET_PREFIX}_app_token", phone, app_token)
+    # 清理旧双桶残留
+    middleware.bucketDel(f"{BUCKET_PREFIX}_app_token", phone)
 
 
 def get_user_accounts() -> list[str]:
@@ -455,29 +457,6 @@ def login_by_sms(phone: str, code: str) -> tuple[str, dict[str, Any]]:
     return resolve_login_token(result, login_payload, phone)
 
 
-def login_account(credentials: str) -> tuple[str, dict[str, Any]]:
-    """兼容旧账密格式：仅用于迁移期兜底，新流程应使用短信登录。"""
-    if "#" not in str(credentials or ""):
-        raise PluginError("当前账号需要重新短信登录")
-    phone, password = str(credentials).split("#", 1)
-    phone = normalize_phone(phone)
-    password = password.strip()
-    if not password:
-        raise PluginError("账号密码为空，请重新短信登录")
-    login_payload = {
-        "phone": phone,
-        "password": password,
-        "jpushId": derive_jpush_id(phone),
-        "loginType": 1,
-        "source": "yyb",
-    }
-    result = fanghua_request("POST", "/app/app/login", data=login_payload, phone=phone)
-    if not isinstance(result, dict) or result.get("code") != 200:
-        reason = result.get("msg") if isinstance(result, dict) else result
-        raise PluginError(f"账密登录失败：{reason}，请改用短信登录")
-    return resolve_login_token(result, login_payload, phone)
-
-
 def get_nested_value(data: Any, *fields: str) -> Any:
     """在嵌套数据中按字段优先级查找第一个有效值。"""
     for target_field in fields:
@@ -618,14 +597,10 @@ def query_today_earned(
 
 
 def get_valid_app_token(phone: str, raw_token: str = "") -> tuple[str, dict[str, Any]]:
-    """优先复用已保存 Token；失效后尝试旧账密兜底，否则提示重新短信登录。"""
+    """优先复用已保存 Token；失效则提示重新短信登录。"""
     phone = normalize_phone(phone)
     candidates: list[str] = []
-    for value in (
-        raw_token,
-        middleware.bucketGet(f"{BUCKET_PREFIX}_app_token", phone) or "",
-        middleware.bucketGet(f"{BUCKET_PREFIX}_token", phone) or "",
-    ):
+    for value in (raw_token, get_account_token(phone)):
         token = extract_token_value(str(value))
         if token and token not in candidates:
             candidates.append(token)
@@ -642,24 +617,6 @@ def get_valid_app_token(phone: str, raw_token: str = "") -> tuple[str, dict[str,
             if isinstance(profile, dict) and profile.get("code") == 200:
                 save_account_token(phone, token)
                 return token, profile
-            last_error = profile.get("msg") if isinstance(profile, dict) else str(profile)
-        except PluginError as exc:
-            last_error = str(exc)
-
-    # 兼容旧“手机号#密码”
-    raw = middleware.bucketGet(f"{BUCKET_PREFIX}_token", phone) or raw_token
-    if isinstance(raw, str) and "#" in raw and not is_app_token(raw.split("#", 1)[-1]):
-        try:
-            app_token, _ = login_account(raw)
-            save_account_token(phone, app_token)
-            profile = fanghua_request(
-                "GET",
-                "/app/user/getUserInfo",
-                app_token,
-                phone=phone,
-            )
-            if isinstance(profile, dict) and profile.get("code") == 200:
-                return app_token, profile
             last_error = profile.get("msg") if isinstance(profile, dict) else str(profile)
         except PluginError as exc:
             last_error = str(exc)
