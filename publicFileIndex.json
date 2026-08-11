@@ -4527,22 +4527,6 @@
   "admin": false,
   "disable": false
  },
- "plugins/芳华未来_By.a740820.py": {
-  "id": "芳华未来_2",
-  "name": "芳华未来_2",
-  "title": "芳华未来",
-  "type": "python",
-  "path": "plugins/芳华未来_By.a740820.py",
-  "version": "v1.0.0",
-  "desc": "芳华未来账号管理插件<br><br>指令：芳华登录、芳华管理、芳华查询、芳华授权(管理员)<br><br>功能：多账号管理、授权后自动同步青龙、支持积分/微信支付，仅提供账号绑定同步，不自动执行芳华币任务<br>登录格式：手机号#密码",
-  "rule": "^(芳华|fhwl)(登录|登陆)$|^登(录|陆)(芳华|fhwl)$|^(芳华|fhwl)(查询|管理)$|^(查询|管理)(芳华|fhwl)$|^清理芳华$|^芳华授权$|^芳华上传$",
-  "icon": "https://i.mji.rip/2025/07/11/2350538ac014afbea48b64409bd5931c.png",
-  "author": "a740820",
-  "class": "工具类",
-  "public": true,
-  "admin": false,
-  "disable": true
- },
  "plugins/视频解析.py": {
   "id": "视频解析",
   "name": "视频解析",
