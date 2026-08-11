@@ -13,6 +13,7 @@
 # [version: 1.2.1]
 # [public: false]
 # [price: 0]
+# [icon: https://i.mji.rip/2025/07/11/2350538ac014afbea48b64409bd5931c.png]
 # [description: 芳华未来账号管理插件。支持短信验证码登录获取 AppToken、账号查询、清蕴支付授权、账号管理和提交青龙。查询显示昵称、手机号、签到状态、今日增加和当前芳华。<br>指令：芳华（登录|查询|管理|教程）。<br>青龙环境变量固定为 qingyun_fh，值为纯 Token；备注写入手机号、所属用户和授权时间。<br>1.2.1：移除密码登录与双 Token 缓存，统一短信登录纯 Token。]
 # [param: {"required":true,"key":"qingyun_fanghua.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
 # [param: {"required":false,"key":"qingyun_fanghua.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
