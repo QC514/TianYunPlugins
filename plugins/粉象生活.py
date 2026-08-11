@@ -1,12 +1,12 @@
 # [disable:false]
 # [rule: ^粉象(.*)$]
 # [admin: false]
-# [service: 2661320550]
+# [service: 68025408]
 # [price: 15.88]
-# [version: V6.35]
+# [version: V1.0.0]
 # [public: true]
 # [title: 粉象生活]
-# [author: sky2022]
+# [author: qingyun]
 # [icon: https://zhengxin-pub.cdn.bcebos.com/logopic/3b7566ad294edf58d055f514ca1fbd79_fullsize.jpg?x-bce-process=image/resize,m_lfit,w_200]
 # [description: 《粉象插件指令说明》https://www.yuque.com/yuqueyonghulzdzov/ddxbk/mwehi1sxq06g1ffk?singleDoc#，插件自带任务! 使用前请先配参。用户指令: 粉象上车,粉象管理,粉象查询,粉象教程；管理员指令: 粉象版本,粉象运行,粉象配置。运行在定时推送里面设置自动运行时间。建议每天21点前运行一次，22点左右运行一次!]
 # [param: {"required":true,"key":"bd_fxconfig.wxzsm","bool":false,"placeholder":"http://127.0.0.1/赞赏码.png","name":"赞赏码链接","desc":"你的wx机器人赞赏码链接"}]
@@ -814,8 +814,9 @@ class ATM_FX:
         else:
             self.sender.reply(f'输入有误，退出！')
 
-    def rwyx(self):
-        self.sender.reply(f'{self.name} 🔔开始运行粉象任务')
+    def rwyx(self, silent=False):
+        # silent=True: 管理员一键运行时静默，仅保留首尾汇总消息
+        # self.sender.reply(f'{self.name} 🔔开始运行粉象任务')
         rw_json = self.get_rwinfo()
         if isinstance(rw_json, dict):
             issign = rw_json['data']['signInModule']
@@ -824,7 +825,8 @@ class ATM_FX:
                 if rwqd is True:
                     pass
                 else:
-                    self.sender.reply(f'⛔{self.name}\n{rwqd}')
+                    if not silent:
+                        self.sender.reply(f'⛔{self.name}\n{rwqd}')
             else:
                 pass
             rws = rw_json['data']['taskModule']['taskResult']
@@ -848,7 +850,8 @@ class ATM_FX:
                 else:
                     mdsp = md['itemTitle']
                     itemPicUrl = md['itemPicUrl']
-                    self.sender.replyImage(itemPicUrl)
+                    if not silent:
+                        self.sender.replyImage(itemPicUrl)
                 if today == dateStr:
                     dateStr = cx['data']['openLotteryModule']['now']['dateStr']
                     jms = cx['data']['openLotteryModule']['now']['rewardCodes']
@@ -858,7 +861,8 @@ class ATM_FX:
                         zjje += jg['rewardAmount']
                         zjje += jg['subsidyAmount']
                     zjxx = f'========粉象运行========\n{self.name}-{dateStr}期(未开奖)\n当前奖码: 🏆{len(jms)}个\n昨日中奖: 🧧{zjje / 100}\n免单商品: 🎁{mdsp}'
-                    self.sender.reply(zjxx)
+                    if not silent:
+                        self.sender.reply(zjxx)
                 elif tomorrow == dateStr:
                     dateStr = cx['data']['openLotteryModule']['prev']['dateStr']
                     jms = cx['data']['openLotteryModule']['now']['rewardCodes']
@@ -868,14 +872,17 @@ class ATM_FX:
                         zjje += jg['rewardAmount']
                         zjje += jg['subsidyAmount']
                     zjxx = f'========粉象运行========\n{self.name}-{dateStr}期(已开奖)\n当前奖码: 🏆{len(jms)}个\n今日中奖: 🧧{zjje / 100}\n免单商品: 🎁{mdsp}'
-                    self.sender.reply(zjxx)
+                    if not silent:
+                        self.sender.reply(zjxx)
                     if mdsp != '无免单商品':
-                        notify = middleware.bucketGet('bd_fxconfig', 'notify')
-                        if notify == '':
-                            pass
-                        else:
-                            tsqd = notify.split(',')
-                            middleware.notifyMasters(f"{zjxx}", tsqd)
+                        # 一键批量运行时不向管理员推送中间过程，仅保留用户中奖推送
+                        if not silent:
+                            notify = middleware.bucketGet('bd_fxconfig', 'notify')
+                            if notify == '':
+                                pass
+                            else:
+                                tsqd = notify.split(',')
+                                middleware.notifyMasters(f"{zjxx}", tsqd)
 
                         if self.Imtype == '':
                             pass
@@ -887,12 +894,15 @@ class ATM_FX:
                     if receiveAll is True:
                         pass
                     else:
-                        self.sender.reply(f'⛔{self.name}\n{receiveAll}')
+                        if not silent:
+                            self.sender.reply(f'⛔{self.name}\n{receiveAll}')
             else:
-                self.sender.reply(f'========粉象运行========\n{self.name}\n运行错误: ⛔{cx}')
+                if not silent:
+                    self.sender.reply(f'========粉象运行========\n{self.name}\n运行错误: ⛔{cx}')
 
         else:
-            self.sender.reply(f'⛔{self.name}\n{rw_json}')
+            if not silent:
+                self.sender.reply(f'⛔{self.name}\n{rw_json}')
 
     def reward(self):
         try:
@@ -1635,7 +1645,7 @@ class ATM_FX:
             self.usid = k
             self.name = y['name']
             self.Imtype = y['Imtype']
-            self.rwyx()
+            self.rwyx(silent=True)
             time.sleep(1)
 
         if notify == '':
