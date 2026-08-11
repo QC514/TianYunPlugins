@@ -2,7 +2,7 @@
 # [title: 茄皇]
 # [language: python]
 # [class: 工具类]
-# [service: 68025408]
+# [service: 作者：qingyun]
 # [disable: false]
 # [admin: false]
 # [rule: ^茄皇(.*)|(.*)茄皇$]
@@ -15,11 +15,11 @@
 # [price: 0]
 # [description: 茄皇五期账号管理插件。账号格式为 wid，支持批量登录验证、账号查询、统一收银台授权、账号管理、提交青龙和立即执行。执行保留签到、浏览、分享、好友能量收取、能量使用和结果通知全部功能。<br>指令：茄皇（登录|查询|执行|管理|教程）。<br>青龙环境变量固定为 QH，wid、所属用户和授权时间写入备注。<br>1.1.0更新：授权支付接入清蕴统一收银台（参考饿了么/幸运星/太平洋）。]
 
-# [param: {"required":true,"key":"qingyun.qh.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
-# [param: {"required":false,"key":"qingyun.qh.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
-# [param: {"required":false,"key":"qingyun.qh.is_proxy","bool":true,"placeholder":"","name":"启用代理","desc":"是否为茄皇接口启用代理"}]
-# [param: {"required":false,"key":"qingyun.qh.proxy_pool","bool":false,"placeholder":"http://代理池接口","name":"代理池地址","desc":"返回单个代理地址的接口"}]
-# [param: {"required":false,"key":"qingyun.qh.tutorial_image","bool":false,"placeholder":"http://地址/教程图片.jpg","name":"教程图片","desc":"茄皇教程中发送的活动入口或操作图片"}]
+# [param: {"required":true,"key":"qingyun_qh.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
+# [param: {"required":false,"key":"qingyun_qh.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
+# [param: {"required":false,"key":"qingyun_qh.is_proxy","bool":true,"placeholder":"","name":"启用代理","desc":"是否为茄皇接口启用代理"}]
+# [param: {"required":false,"key":"qingyun_qh.proxy_pool","bool":false,"placeholder":"http://代理池接口","name":"代理池地址","desc":"返回单个代理地址的接口"}]
+# [param: {"required":false,"key":"qingyun_qh.tutorial_image","bool":false,"placeholder":"http://地址/教程图片.jpg","name":"教程图片","desc":"茄皇教程中发送的活动入口或操作图片"}]
 
 """统一快乐星球茄皇五期 AutMan 账号管理与任务插件。"""
 
@@ -57,7 +57,7 @@ except ImportError:
 
 SCRIPT_NAME = "茄皇"
 FULL_SCRIPT_NAME = "统一茄皇五期"
-BUCKET_PREFIX = "qingyun.qh"
+BUCKET_PREFIX = "qingyun_qh"
 QL_ENV_NAME = "QH"
 BASE_URL = "https://farmgames.ioutu.cn"
 MAX_RETRIES = 3
