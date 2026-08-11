@@ -11,14 +11,14 @@
 # [platform: all] 适用的平台
 # [open_source: false]是否开源
 # [icon: https://pp.myapp.com/ma_icon/0/icon_4848_1772677983/256]图标链接地址，请使用48像素的正方形图标，支持http和https
-# [version: 1.5.0]版本号
+# [version: 1.5.1]版本号
 # [public: true] 是否发布？值为true或false，不设置则上传aut云时会自动设置为true，false时上传后不显示在市场中，但是搜索能搜索到，方便开发者测试
 # [price: 18.88] 上架价格
-# [description: 适配作者：YSJohnson的太平洋汽车脚本。ck提交青龙。格式“账号#密码#openid”。<br>指令：太平洋（登录|查询|管理|授权|清理|教程）<br>1.5.0更新：授权支付接入清蕴支付 start_checkout（参考幸运星/饿了么）；<br>1.4.0更新：修复查询显示问题；<br>1.3.0更新：优化查询显示；<br>1.1.0更新：账号管理增加扫码获取提现参数openid，实现自动提现；<br>1.0.0初版：支持批量ck登录，支持代理。] 使用方法尽量写具体
+# [description: 适配作者：YSJohnson的太平洋汽车脚本。ck提交青龙。格式“账号#密码#openid”。<br>指令：太平洋（登录|查询|管理|授权|清理|教程）<br>1.5.1更新：修复授权成功后启用青龙变量报404（变量已启用时跳过）；<br>1.5.0更新：授权支付接入统一收银台（参考幸运星/饿了么）；<br>1.4.0更新：修复查询显示问题；<br>1.3.0更新：优化查询显示；<br>1.1.0更新：账号管理增加扫码获取提现参数openid，实现自动提现；<br>1.0.0初版：支持批量ck登录，支持代理。] 使用方法尽量写具体
 
 # [param: {"required":true,"key":"qingyun_tpyqc.ql_config","bool":false,"placeholder":"http://xx.xx.xx.xx:xxxx|xxx|xxx","name":"对接青龙","desc":"http://ip:端口丨ClientID丨ClientSecret"}]
 # [param: {"required":false,"key":"qingyun_tpyqc.var_name","bool":false,"placeholder":"m_tpyqc","name":"环境变量名","desc":"青龙容器内的变量名，默认为：m_tpyqc"}]
-# [param: {"required":false,"key":"qingyun_tpyqc.price","bool":false,"placeholder":"1","name":"上车价格","desc":"上车价格(单位:元)/30天，支付走清蕴支付统一收银台"}]
+# [param: {"required":false,"key":"qingyun_tpyqc.price","bool":false,"placeholder":"1","name":"上车价格","desc":"上车价格(单位:元)/30天"}]
 # [param: {"required":false,"key":"qingyun_tpyqc.is_proxy","bool":true,"placeholder":"","name":"是否启用代理","desc":"true/false"}]
 # [param: {"required":false,"key":"qingyun_tpyqc.proxy_pool","bool":false,"placeholder":"http://代理池API地址","name":"代理池地址","desc":"代理API服务地址"}]
 
@@ -29,7 +29,7 @@ bucket_prefix = "qingyun_tpyqc"
 from datetime import datetime, timedelta  # 操作日期、时间以及时间间隔
 # from typing import Self
 import middleware  # autman的中间件
-import qingyun_payment  # 清蕴支付统一收银台
+import qingyun_payment  # 统一支付收银台
 from decimal import Decimal  # 处理浮点数
 import time  # 处理时间
 import json  # 处理json数据
@@ -754,47 +754,147 @@ def add_to_qinglong(token, account, username):
         return False
 
 
-def enable_in_qinglong(env_ids):
-    """启用环境变量"""
+def _normalize_env_ids(env_ids):
+    """规范化青龙环境变量ID列表"""
+    if env_ids is None:
+        return []
+    if isinstance(env_ids, str):
+        try:
+            env_ids = json.loads(env_ids)
+        except Exception:
+            return []
+    if not isinstance(env_ids, (list, tuple, set)):
+        env_ids = [env_ids]
+    normalized = []
+    for env_id in env_ids:
+        if env_id is None or env_id == "":
+            continue
+        try:
+            normalized.append(int(env_id))
+        except Exception:
+            normalized.append(env_id)
+    return normalized
+
+
+def _qinglong_headers():
+    return {
+        "Authorization": f"Bearer {ql_token}",
+        "Content-Type": "application/json"
+    }
+
+
+def _fetch_qinglong_envs():
+    """获取青龙全部环境变量"""
+    response = requests.get(f"{ql_url}/open/envs", headers=_qinglong_headers(), timeout=15)
+    if response.status_code != 200:
+        raise Exception(f"获取环境变量失败: {response.status_code}")
+    rjson = response.json()
+    if rjson.get("code") not in (None, 200):
+        raise Exception(rjson.get("message") or "获取环境变量失败")
+    data = rjson.get("data", [])
+    return data if isinstance(data, list) else []
+
+
+def _is_env_enabled(env):
+    """青龙变量启用状态：status=0 表示启用，1 表示禁用"""
+    status = env.get("status")
+    if status is None:
+        return True
     try:
-        url = f"{ql_url}/open/envs/enable"
-        headers = {
-            "Authorization": f"Bearer {ql_token}",
-            "Content-Type": "application/json"
-        }
-        response = requests.put(url, headers=headers, data=json.dumps(env_ids))
-        if response.status_code == 200:
+        return int(status) == 0
+    except Exception:
+        return str(status) in ("0", "false", "False", "enabled", "enable")
+
+
+def _filter_env_ids_by_status(env_ids, want_enabled):
+    """按目标状态过滤ID：want_enabled=True 时仅返回当前未启用的ID"""
+    env_ids = _normalize_env_ids(env_ids)
+    if not env_ids:
+        return []
+    envs = _fetch_qinglong_envs()
+    env_map = {}
+    for env in envs:
+        env_id = env.get("id")
+        if env_id is None:
+            continue
+        try:
+            env_map[int(env_id)] = env
+        except Exception:
+            env_map[env_id] = env
+        env_map[str(env_id)] = env
+
+    filtered = []
+    for env_id in env_ids:
+        env = env_map.get(env_id)
+        if env is None:
+            try:
+                env = env_map.get(int(env_id))
+            except Exception:
+                env = None
+        if env is None:
+            env = env_map.get(str(env_id))
+        if env is None:
+            # 本地缓存可能有脏ID，跳过避免404
+            continue
+        currently_enabled = _is_env_enabled(env)
+        if want_enabled and not currently_enabled:
+            filtered.append(env.get("id", env_id))
+        elif (not want_enabled) and currently_enabled:
+            filtered.append(env.get("id", env_id))
+    return filtered
+
+
+def _toggle_qinglong_envs(action, env_ids, success_when_already=True):
+    """启用/禁用青龙环境变量，已是目标状态时不报错"""
+    env_ids = _normalize_env_ids(env_ids)
+    if not env_ids:
+        return True
+
+    want_enabled = action == "enable"
+    try:
+        target_ids = _filter_env_ids_by_status(env_ids, want_enabled=want_enabled)
+    except Exception as e:
+        # 状态查询失败时回退到直接调用，兼容旧逻辑
+        target_ids = env_ids
+        print(f"⚠️ 查询青龙变量状态失败，回退直接{action}: {e}")
+
+    if not target_ids:
+        return success_when_already
+
+    url = f"{ql_url}/open/envs/{action}"
+    response = requests.put(url, headers=_qinglong_headers(), data=json.dumps(target_ids), timeout=15)
+    if response.status_code == 200:
+        try:
             rjson = response.json()
-            if rjson.get('code') == 200:
-                return True
-            else:
-                sender.reply(f"❌ 启用环境变量失败: {rjson.get('message')}")
-                return False
-        else:
-            raise Exception(f"{response.status_code}")
+        except Exception:
+            rjson = {}
+        if rjson.get("code", 200) == 200:
+            return True
+        message = str(rjson.get("message") or "")
+        # 部分青龙版本对已启用/已禁用变量返回404/业务错误
+        if any(key in message for key in ("404", "已启用", "已开启", "已经启用", "已禁用", "已经禁用", "不存在")):
+            return True
+        raise Exception(message or f"{action}失败")
+
+    # HTTP 404 常见于变量已是目标状态或ID失效
+    if response.status_code == 404:
+        return True
+    raise Exception(f"{response.status_code}")
+
+
+def enable_in_qinglong(env_ids):
+    """启用环境变量；变量已启用时视为成功"""
+    try:
+        return _toggle_qinglong_envs("enable", env_ids)
     except Exception as e:
         sender.reply(f"❌ 启用环境变量失败: {str(e)}")
         return False
 
 
 def disable_in_qinglong(env_ids):
-    """禁用环境变量"""
+    """禁用环境变量；变量已禁用时视为成功"""
     try:
-        url = f"{ql_url}/open/envs/disable"
-        headers = {
-            "Authorization": f"Bearer {ql_token}",
-            "Content-Type": "application/json"
-        }
-        response = requests.put(url, headers=headers, data=json.dumps(env_ids))
-        if response.status_code == 200:
-            rjson = response.json()
-            if rjson.get('code') == 200:
-                return True
-            else:
-                sender.reply(f"❌ 禁用环境变量失败: {rjson.get('message')}")
-                return False
-        else:
-            raise Exception(f"{response.status_code}")
+        return _toggle_qinglong_envs("disable", env_ids)
     except Exception as e:
         sender.reply(f"❌ 禁用环境变量失败: {str(e)}")
         return False
@@ -875,7 +975,7 @@ def manage_accounts():
             for account in accounts:
                 show_ck(account)
         elif choice == '00':
-            # 批量授权逻辑（支付接入清蕴支付 start_checkout）
+            # 批量授权逻辑（统一收银台）
             sender.reply("📝 请输入授权天数:")
             days = sender.listen(60000)
             if not days:
@@ -973,7 +1073,7 @@ def show_account_menu(account):
 
 
 def auth_account(account):
-    """账号授权（支付接入清蕴支付 start_checkout）"""
+    """账号授权（统一收银台）"""
     try:
         price = Decimal(middleware.bucketGet(bucket_prefix, 'price') or '1')  # 每月价格
 
@@ -991,7 +1091,7 @@ def auth_account(account):
                 raise ValueError()
             return finalize_account_auth(account, days, amount=None)
 
-        sender.reply(f"📝 请输入授权天数（{price}元/30天，支付走清蕴支付）:")
+        sender.reply(f"📝 请输入授权天数（{price}元/30天）:")
         days = sender.listen(60000)
         if not days:
             sender.reply("❌ 操作超时")
@@ -1045,7 +1145,7 @@ def finalize_account_auth(account, days, amount=None):
 
 
 def process_payment(amount, days, account_count=1):
-    """处理支付：接入清蕴支付统一收银台（参考幸运星/饿了么）"""
+    """处理支付：接入统一收银台（参考幸运星/饿了么）"""
     try:
         amount = float(Decimal(str(amount)).quantize(Decimal('0.01'), rounding='ROUND_UP'))
     except Exception:
