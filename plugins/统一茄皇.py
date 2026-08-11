@@ -1,699 +1,1243 @@
-# [title: 统一茄皇]
+# [author: qingyun]
+# [title: 茄皇]
 # [language: python]
 # [class: 工具类]
-# [service: 2993959969] 售后联系方式
-# [author: rujingxianghai] 作者
-# [rule: ^(茄皇|qh)(登录|登陆)$|^登(录|陆)(茄皇|qh)$|^(茄皇|qh)(查询|管理|教程)$|^(查询|管理)(茄皇|qh)$|^茄皇授权$|^茄皇检测$]
-# [cron: 18 9 * * *] cron定时
-# [priority: 0] 优先级
-# [platform: qq,qb,wx,tb,tg,web,wxmp] 适用平台
+# [service: 68025408]
+# [disable: false]
+# [admin: false]
+# [rule: ^茄皇(.*)|(.*)茄皇$]
+# [cron: 25 10 * * *]
+# [priority: 99999999]
+# [platform: all]
 # [open_source: false]
-# [icon: https://img-upload.vorto.cc/beb5a0d45aa58e08348e1e4076fa419e.jpg]
-# [version: 1.4]
-# [public:true]
-# [price: 3.88]
-# [description: 统一梦时代茄皇的家，每日签到浇水领奖励<br>指令：茄皇登录、管理、查询、授权、教程<br>1.1.0：重构，支付/授权/管理统一走vorto_utils<br>1.0.5：适配新版<br>1.0.4：适配新版活动<br>1.0.3：新增茄皇教程指令、优化码支付二维码生成方式]
+# [version: 1.1.0]
+# [public: false]
+# [price: 0]
+# [description: 茄皇五期账号管理插件。账号格式为 wid，支持批量登录验证、账号查询、统一收银台授权、账号管理、提交青龙和立即执行。执行保留签到、浏览、分享、好友能量收取、能量使用和结果通知全部功能。<br>指令：茄皇（登录|查询|执行|管理|教程）。<br>青龙环境变量固定为 QH，wid、所属用户和授权时间写入备注。<br>1.1.0更新：授权支付接入清蕴统一收银台（参考饿了么/幸运星/太平洋）。]
 
+# [param: {"required":true,"key":"qingyun.qh.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
+# [param: {"required":false,"key":"qingyun.qh.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
+# [param: {"required":false,"key":"qingyun.qh.is_proxy","bool":true,"placeholder":"","name":"启用代理","desc":"是否为茄皇接口启用代理"}]
+# [param: {"required":false,"key":"qingyun.qh.proxy_pool","bool":false,"placeholder":"http://代理池接口","name":"代理池地址","desc":"返回单个代理地址的接口"}]
+# [param: {"required":false,"key":"qingyun.qh.tutorial_image","bool":false,"placeholder":"http://地址/教程图片.jpg","name":"教程图片","desc":"茄皇教程中发送的活动入口或操作图片"}]
+
+"""统一快乐星球茄皇五期 AutMan 账号管理与任务插件。"""
+
+import base64
 import json
-import time
+import os
 import random
-import requests
-from datetime import datetime
+import re
+import time
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_UP
+from typing import Any
+
 import middleware
-import vorto_utils
+import qingyun_payment
+import requests
+import urllib3
 
-senderID = middleware.getSenderID()
-sender = middleware.Sender(senderID)
-userid = sender.getUserID()
-uservalue = middleware.bucketGet(bucket='s_qh_user', key=userid)
+try:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-PLUGIN_CONFIG = {'bucket': 's_qh', 'coin_key': 'dd_sign_points', 'name': '茄皇的家'}
-
-# [param: {"required":false,"key":"s_qh.qlname","bool":false,"placeholder":"Host丨ClientID丨ClientSecret","name":"设置对接容器","desc":"面板容器参数，不填则使用Vorto初始化配置"}]
-# [param: {"required":false,"key":"s_qh.use_dumbpanel","bool":true,"placeholder":"","name":"使用DumbPanel","desc":"勾选使用DumbPanel面板，不勾选使用青龙面板"}]
-# [param: {"required":true,"key":"s_qh.osname","bool":false,"placeholder":"例:S_TYQH","name":"青龙变量名","desc":"青龙容器内茄皇的变量名"}]
-# [param: {"required":true,"key":"s_qh.Vipmoney","bool":false,"placeholder":"例:0.88","name":"上车价格","desc":"授权价格(元)/月"}]
-# [param: {"required":false,"key":"s_qh.coin","bool":false,"placeholder":"不填为关闭","name":"积分开通","desc":"授权一月需要多少积分"}]
-# [param: {"required":false,"key":"s_qh.notify","bool":false,"placeholder":"qq,wx,tb","name":"通知渠道","desc":"检测通知推送渠道"}]
-# [param: {"required":false,"key":"s_qh.notify_days","bool":false,"placeholder":"3","name":"提前提醒天数","desc":"到期前多少天开始提醒"}]
-
-
-# ==================== Panel Operations ====================
-
-def _get_ql_client():
-    """Get panel client based on config switch"""
-    osname = middleware.bucketGet('s_qh', 'osname') or 'S_TYQH'
-    qlname = middleware.bucketGet('s_qh', 'qlname') or ''
-    use_dp = str(middleware.bucketGet('s_qh', 'use_dumbpanel') or '').lower() == 'true'
-
-    if use_dp:
-        return vorto_utils.DumbPanelClient(osname, qlname) if qlname else vorto_utils.DumbPanelClient(osname)
-    else:
-        return vorto_utils.QingLongClient(osname, qlname) if qlname else vorto_utils.QingLongClient(osname)
-
-
-def update_ql_env(wid, account_info):
-    """Update panel env variable, format: wid#phone"""
-    wid_value = account_info.get('wid', '')
-    phone_value = account_info.get('phone', '')
-    if not wid_value or not phone_value:
-        return False
-    env_value = f"{wid_value}#{phone_value}"
-    auth_time = middleware.bucketGet('s_qh_auth', wid) or '未授权'
-    ql = _get_ql_client()
-    return ql.update_env(wid, env_value, f"茄皇:{vorto_utils.mask_account(wid)}|到期:{auth_time}")
-
-
-def delete_ql_env(wid):
-    """Delete panel env variable"""
-    ql = _get_ql_client()
-    return ql.delete_env(wid)
-
-
-# ==================== QH API ====================
-
-def qh_login(wid, phone):
-    """Login to QH, returns (success, token, user_data_or_error)"""
-    url = "https://api.zhumanito.cn/api/login"
-    headers = {
-        'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf254162e) XWEB/18163 miniProgram/wx532ecb3bdaaf92f9",
-        'Content-Type': "application/json;charset=UTF-8",
-        'origin': 'https://h5.zhumanito.cn',
-        'referer': 'https://h5.zhumanito.cn/'
-    }
-    payload = {"wid": wid, "wm_phone": phone}
+    CRYPTO_BACKEND = "cryptography"
+except ImportError:
     try:
-        response = requests.post(url, data=json.dumps(payload), headers=headers, timeout=10).json()
-        if 'data' in response and 'token' in response['data'] and 'user' in response['data']:
-            return True, response['data']['token'], response['data']['user']
-        return False, None, response.get('msg', '登录失败')
-    except Exception as e:
-        return False, None, str(e)
+        from Crypto.Cipher import AES, PKCS1_OAEP
+        from Crypto.Hash import SHA256
+        from Crypto.PublicKey import RSA
+
+        CRYPTO_BACKEND = "pycryptodome"
+    except ImportError:
+        CRYPTO_BACKEND = None
 
 
-# ==================== User Functions ====================
+SCRIPT_NAME = "茄皇"
+FULL_SCRIPT_NAME = "统一茄皇五期"
+BUCKET_PREFIX = "qingyun.qh"
+QL_ENV_NAME = "QH"
+BASE_URL = "https://farmgames.ioutu.cn"
+MAX_RETRIES = 3
+SUPPORTED_TASK_TYPES = {"SIGN", "BROWSE", "SHARE"}
+FRIEND_TASK_TYPE = "FRIEND_STEAL_ENERGY"
+FRIEND_STATUS_CLAIMABLE = "0"
+PUBLIC_KEY = (
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA70sK419vy3MabW3lEGlk"
+    "7Zh1u78OdnVlioVazp5Y46eBh+/TDqo/wZ9VrQ/4MmAtoP0vJ2vmwP5gqO3WPoj"
+    "b07WddXfF1eU+5M+Rj3s0eSRrvZvBcGZ3qK0dOgZJScK66IDQazt/c4xqhDcsI"
+    "tIyNRahUqB/IKc6E80GZJvMvFtZVSCseAXC0mAJXhi1AdUOlP+3Pv0fiUVejTJp"
+    "1j7LBNWJ7Z5/8mRcclQH0vmxsdYsaV3qZiJ2d/CfNoKcwmI2IWmeZy8NP5U8Hn"
+    "0AsxPEwjdHoEqG/iy/SoA46TZL+RLtWqUSHXpaKR/VFN0rbl25SE91X8FTfLqyD"
+    "8LfGMCwRQIDAQAB"
+)
+USER_AGENT = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 26_5_2 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+    "MicroMessenger/8.0.75(0x18004b42) NetType/WIFI Language/zh_CN "
+    "miniProgram/wx532ecb3bdaaf92f9"
+)
 
-def bind_account():
-    """Bindaccounts - wid#phone format"""
-    sender.reply(
-        "=====茄皇登录=====\n"
-        "支持批量登录，格式如下:\n"
-        "wid#phone（多账号换行分隔）\n"
-        "------------------\n"
-        "例如: 11281234567#13345678900\n"
-        "------------------\n"
-        "💡 wid获取方式:小程序\"统一梦时代\"\n"
-        "1.抓包搜索 \"wid\"或登录时抓login接口\n"
-        "2.个人中心授权后点头像，复制\"客户编号\"\n"
-        "------------------\n"
-        "回复\"q\"退出操作\n"
-        "=================="
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+sender_id = middleware.getSenderID()
+sender = middleware.Sender(sender_id)
+user_id = sender.getUserID()
+
+
+class PluginError(RuntimeError):
+    """插件运行过程中可直接展示给用户的错误。"""
+
+
+def mask_wid(wid: str) -> str:
+    """隐藏 wid 中间内容。"""
+    if len(wid) <= 7:
+        return wid
+    return wid[:3] + "****" + wid[-4:]
+
+
+def parse_accounts(text: str) -> list[str]:
+    """解析换行或 & 分隔的 wid。"""
+    accounts = []
+    for value in re.split(r"[&\r\n]+", text or ""):
+        wid = value.strip()
+        if not wid:
+            continue
+        if "#" in wid:
+            raise PluginError(f"账号格式错误：{wid}，正确格式仅为 wid")
+        accounts.append(wid)
+    return accounts
+
+
+def get_user_accounts() -> list[str]:
+    raw = middleware.bucketGet(f"{BUCKET_PREFIX}.user", user_id) or "[]"
+    try:
+        result = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        result = []
+    return [str(value) for value in result] if isinstance(result, list) else []
+
+
+def save_user_accounts(accounts: list[str]) -> None:
+    middleware.bucketSet(
+        f"{BUCKET_PREFIX}.user",
+        user_id,
+        json.dumps(accounts, ensure_ascii=False),
     )
-    input_text = sender.input(120000, 1, False)
-    if not input_text:
-        sender.reply("操作超时")
+
+
+def get_proxy() -> dict[str, str] | None:
+    enabled = str(middleware.bucketGet(BUCKET_PREFIX, "is_proxy") or "false").lower()
+    if enabled not in {"true", "1", "yes"}:
+        return None
+    proxy_api = middleware.bucketGet(BUCKET_PREFIX, "proxy_pool")
+    if not proxy_api:
+        raise PluginError("已启用代理，但未配置代理池地址")
+    response = requests.get(proxy_api, timeout=15, verify=False)
+    response.raise_for_status()
+    proxy_url = response.text.strip()
+    if not proxy_url:
+        raise PluginError("代理池没有返回可用代理")
+    return {"http": proxy_url, "https": proxy_url}
+
+
+def send_request(method: str, url: str, **kwargs: Any) -> requests.Response:
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            kwargs.setdefault("timeout", 30)
+            kwargs.setdefault("verify", False)
+            if "proxies" not in kwargs:
+                kwargs["proxies"] = get_proxy()
+            response = requests.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt < MAX_RETRIES:
+                time.sleep(1)
+    raise PluginError(f"请求失败：{last_error}")
+
+
+def encrypt_payload(payload: dict[str, Any]) -> dict[str, str]:
+    """按官方 H5 规则执行 RSA-OAEP-SHA256 + AES-256-GCM 加密。"""
+    if CRYPTO_BACKEND is None:
+        raise PluginError("缺少加密依赖，请安装 cryptography")
+    plaintext = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+    aes_key = os.urandom(32)
+    iv = os.urandom(12)
+    public_key_der = base64.b64decode(PUBLIC_KEY)
+    if CRYPTO_BACKEND == "cryptography":
+        public_key = serialization.load_der_public_key(public_key_der)
+        encrypted_data = AESGCM(aes_key).encrypt(iv, plaintext, None)
+        encrypted_key = public_key.encrypt(
+            aes_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+    else:
+        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
+        ciphertext, tag = cipher.encrypt_and_digest(plaintext)
+        encrypted_data = ciphertext + tag
+        public_key = RSA.import_key(public_key_der)
+        encrypted_key = PKCS1_OAEP.new(public_key, hashAlgo=SHA256).encrypt(aes_key)
+    return {
+        "data": base64.b64encode(encrypted_data).decode(),
+        "key": base64.b64encode(encrypted_key).decode(),
+        "iv": base64.b64encode(iv).decode(),
+    }
+
+
+class TomatoClient:
+    """茄皇五期接口客户端。"""
+
+    def __init__(self, wid: str):
+        self.wid = wid
+        self.tomato_user_id: Any = None
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": USER_AGENT,
+                "Content-Type": "application/json",
+                "Origin": BASE_URL,
+                "Referer": f"{BASE_URL}/?wid={wid}",
+            }
+        )
+        proxies = get_proxy()
+        if proxies:
+            self.session.proxies.update(proxies)
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        encrypted: bool = True,
+        retry: int = 2,
+    ) -> dict[str, Any]:
+        url = f"{BASE_URL}{path}"
+        for attempt in range(retry + 1):
+            kwargs: dict[str, Any] = {"timeout": 20, "verify": False}
+            if payload:
+                kwargs["json"] = encrypt_payload(payload) if encrypted else payload
+                if encrypted:
+                    kwargs["headers"] = {"X-Request-Encrypted": "true"}
+            try:
+                response = self.session.request(method, url, **kwargs)
+                if response.status_code == 429 and attempt < retry:
+                    wait = response.headers.get("Retry-After", "2")
+                    time.sleep(max(1.0, float(wait)) + attempt)
+                    continue
+                response.raise_for_status()
+                result = response.json()
+            except (requests.RequestException, ValueError) as exc:
+                if attempt < retry:
+                    time.sleep(1.5 + attempt)
+                    continue
+                raise PluginError(f"接口请求失败：{exc}") from exc
+            msg = str(result.get("msg", ""))
+            if result.get("code") == 200:
+                return result
+            if attempt < retry and ("频繁" in msg or "稍后" in msg):
+                time.sleep(2.5 + attempt * 1.5)
+                continue
+            raise PluginError(msg or f"接口返回 code={result.get('code')}")
+        raise PluginError("请求重试后仍未成功")
+
+    def login(self) -> dict[str, Any]:
+        result = self.request(
+            "POST",
+            "/api/web/open/tomato/login",
+            {"shareTomatoUserId": None, "wid": self.wid, "queryCardStatus": True},
+        )
+        data = result.get("data") or {}
+        token = data.get("token")
+        if not token:
+            raise PluginError("登录响应中没有 token")
+        self.session.headers["Authorization"] = token
+        self.tomato_user_id = data.get("tomatoUserId")
+        return data
+
+    def home(self) -> dict[str, Any]:
+        return self.request("GET", "/api/web/member/tomato/home").get("data") or {}
+
+    def tasks(self) -> list[dict[str, Any]]:
+        return self.request("GET", "/api/web/member/tomato/tasks").get("data") or []
+
+    def complete_task(self, task: dict[str, Any]) -> dict[str, Any]:
+        task_type = task.get("taskType")
+        payload = {"taskType": task_type}
+        if task_type != "SHARE":
+            payload["browseTarget"] = task.get("browseTarget") or ""
+        elif self.tomato_user_id:
+            try:
+                self.request(
+                    "POST",
+                    "/api/web/member/tomato/miniprogram/qrcode/create",
+                    {
+                        "page": "packages/wm-cloud-qiehuang/home/index",
+                        "scene": str(self.tomato_user_id),
+                    },
+                )
+            except Exception:
+                pass
+        return self.request(
+            "POST", "/api/web/member/tomato/tasks/complete", payload
+        ).get("data") or {}
+
+    def friends(self, page_size: int = 20) -> list[dict[str, Any]]:
+        friends = []
+        page_num = 1
+        while True:
+            result = self.request(
+                "GET",
+                f"/api/web/member/tomato/friends?pageNum={page_num}&pageSize={page_size}",
+            )
+            rows = result.get("rows") or []
+            friends.extend(rows)
+            total = int(result.get("total") or 0)
+            if not rows or (total and len(friends) >= total) or len(rows) < page_size:
+                break
+            page_num += 1
+        return friends
+
+    def friend_home(self, friend_user_id: Any) -> dict[str, Any]:
+        return self.request(
+            "GET", f"/api/web/member/tomato/friends/{friend_user_id}/home"
+        ).get("data") or {}
+
+    def steal_friend_energy(self, friend_user_id: Any) -> Any:
+        return self.request(
+            "POST",
+            "/api/web/member/tomato/friends/steal",
+            {"friendTomatoUserId": friend_user_id},
+        ).get("data")
+
+    def use_energy(self) -> dict[str, Any]:
+        return self.request(
+            "POST", "/api/web/member/tomato/energy/use", encrypted=False
+        ).get("data") or {}
+
+
+def login_account(wid: str) -> tuple[TomatoClient, dict[str, Any]]:
+    client = TomatoClient(wid)
+    return client, client.login()
+
+
+def home_line(data: dict[str, Any], prefix: str = "当前状态") -> str:
+    return (
+        f"{prefix}：能量 {data.get('energyBalance', 0)}，"
+        f"番茄 {data.get('tomatoBalance', 0)}，"
+        f"{data.get('stageName', '未知阶段')} "
+        f"{data.get('currentExp', 0)}/{data.get('stageRequiredExp', 0)}"
+    )
+
+
+def query_account_details(wid: str) -> dict[str, Any]:
+    client, login_data = login_account(wid)
+    home = client.home()
+    tasks = client.tasks()
+    completed = sum(str(task.get("completed")) == "1" for task in tasks)
+    return {
+        "wid": wid,
+        "昵称": login_data.get("nickName") or "未设置昵称",
+        "能量": home.get("energyBalance", 0),
+        "番茄": home.get("tomatoBalance", 0),
+        "阶段": home.get("stageName", "未知阶段"),
+        "经验": f"{home.get('currentExp', 0)}/{home.get('stageRequiredExp', 0)}",
+        "任务": f"{completed}/{len(tasks)}",
+    }
+
+
+def run_account(wid: str) -> list[str]:
+    """执行原茄皇脚本的全部任务。"""
+    logs = [f"账号：{mask_wid(wid)}"]
+    client, login_data = login_account(wid)
+    logs.append(f"登录成功：{login_data.get('nickName') or '未设置昵称'}")
+    home = client.home()
+    logs.append(home_line(home))
+    completed = 0
+    skipped = 0
+    friend_task = None
+    for task in client.tasks():
+        name = task.get("taskName") or task.get("taskCode") or "未知任务"
+        task_type = task.get("taskType")
+        if task_type == FRIEND_TASK_TYPE:
+            friend_task = task
+            if str(task.get("completed")) == "1":
+                logs.append(f"任务已完成：{name}")
+            continue
+        if str(task.get("completed")) == "1":
+            logs.append(f"任务已完成：{name}")
+            continue
+        if task_type not in SUPPORTED_TASK_TYPES:
+            skipped += 1
+            logs.append(f"跳过任务：{name}（需在小程序内操作）")
+            continue
+        try:
+            result = client.complete_task(task)
+            reward = result.get("rewardText") or task.get("rewardText") or "已领取"
+            logs.append(f"任务完成：{name}，{reward}")
+            completed += 1
+        except Exception as exc:
+            logs.append(f"任务失败：{name}，{exc}")
+        time.sleep(random.uniform(2.5, 3.5))
+
+    try:
+        claimable = [
+            friend
+            for friend in client.friends()
+            if str(friend.get("friendStatus")) == FRIEND_STATUS_CLAIMABLE
+            and friend.get("friendTomatoUserId")
+        ]
+        stolen_count = stolen_energy = failed_count = 0
+        for friend in claimable:
+            friend_user_id = friend["friendTomatoUserId"]
+            try:
+                friend_home = client.friend_home(friend_user_id)
+                amount = int(friend_home.get("stealAmount") or 0)
+                if str(friend_home.get("canSteal")) != "1" or amount <= 0:
+                    continue
+                client.steal_friend_energy(friend_user_id)
+                stolen_count += 1
+                stolen_energy += amount
+            except Exception:
+                failed_count += 1
+            time.sleep(random.uniform(1.5, 2.5))
+        if stolen_count:
+            detail = f"好友能量：成功收取 {stolen_count} 位，共 {stolen_energy} 能量"
+            if failed_count:
+                detail += f"，失败 {failed_count} 位"
+            logs.append(detail)
+            if friend_task and str(friend_task.get("completed")) != "1":
+                completed += 1
+        elif failed_count:
+            logs.append(f"好友能量：收取失败 {failed_count} 位")
+        else:
+            logs.append("好友能量：暂无可收取能量")
+    except Exception as exc:
+        logs.append(f"好友能量失败：{exc}")
+
+    home = client.home()
+    logs.append(home_line(home, "任务后状态"))
+    energy = int(home.get("energyBalance") or 0)
+    if energy > 0:
+        before_tomato = int(home.get("tomatoBalance") or 0)
+        try:
+            grown = client.use_energy()
+            after_tomato = int(grown.get("tomatoBalance") or 0)
+            gained = int(grown.get("gainedTomatoAmount") or 0)
+            if not gained:
+                gained = max(0, after_tomato - before_tomato)
+            logs.append(
+                f"使用能量：消耗 {grown.get('usedEnergyAmount', energy)}，"
+                f"成长到 {grown.get('stageName', '未知阶段')} "
+                f"{grown.get('currentExp', 0)}/{grown.get('stageRequiredExp', 0)}，"
+                f"获得番茄 {gained}"
+            )
+            home = grown
+        except Exception as exc:
+            logs.append(f"使用能量失败：{exc}")
+    else:
+        logs.append("使用能量：当前没有可用能量")
+    logs.append(home_line(home, "最终状态"))
+    logs.append(f"本次完成任务 {completed} 个，跳过 {skipped} 个")
+    return logs
+
+
+def parse_qinglong_config() -> tuple[str, str, str]:
+    """读取并校验青龙连接配置。"""
+    config = middleware.bucketGet(BUCKET_PREFIX, "ql_config")
+    if not config:
+        raise PluginError("未配置青龙连接")
+    parts = [value.strip() for value in re.split(r"[丨|]", config) if value.strip()]
+    if len(parts) != 3:
+        raise PluginError("青龙配置格式应为 地址丨ClientID丨ClientSecret")
+    url, client_id, client_secret = parts
+    return url.rstrip("/"), client_id, client_secret
+
+
+def get_qinglong_token(url: str, client_id: str, client_secret: str) -> str:
+    response = send_request(
+        "GET",
+        f"{url}/open/auth/token",
+        params={"client_id": client_id, "client_secret": client_secret},
+    )
+    data = response.json()
+    token = data.get("data", {}).get("token") if isinstance(data, dict) else None
+    if not token:
+        raise PluginError("获取青龙访问令牌失败")
+    return str(token)
+
+
+def qinglong_context() -> tuple[str, dict[str, str]]:
+    url, client_id, client_secret = parse_qinglong_config()
+    token = get_qinglong_token(url, client_id, client_secret)
+    return url, {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+
+def get_qinglong_envs(url: str, headers: dict[str, str]) -> list[dict[str, Any]]:
+    response = send_request("GET", f"{url}/open/envs", headers=headers)
+    data = response.json().get("data", [])
+    return data if isinstance(data, list) else []
+
+
+def get_env_id(env: dict[str, Any]) -> Any:
+    return env.get("id", env.get("_id"))
+
+
+def submit_to_qinglong(wid: str, owner_id: str) -> bool:
+    """新增或更新单个 wid 对应的 QH 环境变量。"""
+    url, headers = qinglong_context()
+    envs = get_qinglong_envs(url, headers)
+    target_env = None
+    for env in envs:
+        if env.get("name") != QL_ENV_NAME:
+            continue
+        remarks = str(env.get("remarks", ""))
+        if f"账号:{wid}丨" in remarks or str(env.get("value", "")) == wid:
+            target_env = env
+            break
+    auth_time = middleware.bucketGet(f"{BUCKET_PREFIX}.auth", wid) or "未授权"
+    remarks = f"{FULL_SCRIPT_NAME}账号:{wid}丨用户:{owner_id}丨授权时间:{auth_time}"
+    data: dict[str, Any] = {"name": QL_ENV_NAME, "value": wid, "remarks": remarks}
+    if target_env:
+        data["id"] = get_env_id(target_env)
+        response = send_request("PUT", f"{url}/open/envs", headers=headers, json=data)
+    else:
+        response = send_request("POST", f"{url}/open/envs", headers=headers, json=[data])
+    response_data = response.json()
+    if isinstance(response_data, dict) and response_data.get("code") not in (None, 0, 200):
+        raise PluginError(response_data.get("message") or "提交青龙失败")
+    new_envs = response_data.get("data", []) if isinstance(response_data, dict) else []
+    if isinstance(new_envs, list) and new_envs:
+        env_id = get_env_id(new_envs[0])
+        if env_id is not None:
+            middleware.bucketSet(f"{BUCKET_PREFIX}.env_id", wid, str(env_id))
+    return True
+
+
+def delete_qinglong_env(wid: str) -> bool:
+    """按 wid 删除对应青龙环境变量。"""
+    url, headers = qinglong_context()
+    ids_to_delete = []
+    for env in get_qinglong_envs(url, headers):
+        if env.get("name") != QL_ENV_NAME:
+            continue
+        remarks = str(env.get("remarks", ""))
+        if f"账号:{wid}丨" in remarks or str(env.get("value", "")) == wid:
+            env_id = get_env_id(env)
+            if env_id is not None:
+                ids_to_delete.append(env_id)
+    if ids_to_delete:
+        send_request("DELETE", f"{url}/open/envs", headers=headers, json=ids_to_delete)
+    middleware.bucketDel(f"{BUCKET_PREFIX}.env_id", wid)
+    return True
+
+
+def get_auth_time(wid: str) -> str:
+    return str(middleware.bucketGet(f"{BUCKET_PREFIX}.auth", wid) or "")
+
+
+def is_authorized(wid: str) -> bool:
+    auth_time = get_auth_time(wid)
+    return bool(auth_time and auth_time > str(datetime.now().date()))
+
+
+def calculate_auth_time(wid: str, days: int) -> str:
+    today = datetime.now().date()
+    auth_time = get_auth_time(wid)
+    start_date = today
+    if auth_time:
+        try:
+            current_expiry = datetime.strptime(auth_time, "%Y-%m-%d").date()
+            if current_expiry > today:
+                start_date = current_expiry
+        except ValueError:
+            pass
+    return str(start_date + timedelta(days=days))
+
+
+def get_payment_config() -> Decimal:
+    """读取单账号 30 天授权价格。"""
+    try:
+        price = Decimal(str(middleware.bucketGet(BUCKET_PREFIX, "price") or "1"))
+        if price < 0:
+            raise ValueError("授权价格不能为负数")
+    except (InvalidOperation, ValueError) as exc:
+        raise PluginError(f"授权价格配置错误：{exc}") from exc
+    return price
+
+
+def process_payment(amount: Decimal, days: int, account_count: int = 1) -> bool:
+    """接入清蕴统一收银台完成授权支付。"""
+    try:
+        pay_amount = float(Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_UP))
+    except (InvalidOperation, ValueError, TypeError):
+        sender.reply("❌ 支付金额无效")
+        return False
+
+    if pay_amount <= 0:
+        return True
+
+    header_extra = (
+        f"🎫 商品: {FULL_SCRIPT_NAME}授权\n"
+        f"📅 时长: {days}天\n"
+        f"👥 账号数: {account_count}"
+    )
+    pay_res = qingyun_payment.QingyunCompletePayment.start_checkout(
+        sender=sender,
+        amount=pay_amount,
+        title=f"{FULL_SCRIPT_NAME}授权",
+        order_name=f"{FULL_SCRIPT_NAME}授权",
+        user_id=str(user_id),
+        header_extra=header_extra,
+    )
+    if not isinstance(pay_res, dict) or pay_res.get("code") != 0:
+        return False
+
+    try:
+        paid_money = float(pay_res.get("paid_money", pay_amount) or pay_amount)
+    except (TypeError, ValueError):
+        paid_money = pay_amount
+
+    # 宽松校验：实付不低于应付（账单偏移等场景由支付插件内部处理）
+    if paid_money + 1e-6 < pay_amount:
+        sender.reply(
+            "=====支付失败=====\n"
+            "❌ 支付金额不足\n"
+            "------------------\n"
+            f"💰 应付: {pay_amount}元\n"
+            f"💵 实付: {paid_money}元\n"
+            "=================="
+        )
+        return False
+    return True
+
+
+def authorize_accounts(accounts: list[str]) -> None:
+    """为一个或多个账号付款、授权并提交青龙。"""
+    if not accounts:
         return
-    if input_text.lower() == 'q':
-        sender.reply("已取消")
+    try:
+        price = get_payment_config()
+    except PluginError as exc:
+        sender.reply(f"❌ {exc}")
         return
 
-    lines = [line.strip() for line in input_text.strip().split('\n') if line.strip()]
-    account_list = []
-    for line in lines:
-        if '#' in line:
-            parts = line.split('#')
-            if len(parts) == 2 and len(parts[0]) > 5 and len(parts[1]) >= 7:
-                account_list.append({'wid': parts[0].strip(), 'phone': parts[1].strip()})
-
-    if not account_list:
-        sender.reply("未检测到有效账号，格式应为 wid#phone")
+    if price == 0:
+        sender.reply("请输入授权天数，例如 30；回复 q 退出")
+    else:
+        sender.reply(f"请输入授权天数（{price}元/30天），例如 30；回复 q 退出")
+    days_text = sender.input(60000, 1, False)
+    if not days_text or days_text.lower() == "q":
+        sender.reply("✅ 已取消授权")
+        return
+    try:
+        days = int(days_text)
+        if days <= 0:
+            raise ValueError
+    except ValueError:
+        sender.reply("❌ 授权天数必须是正整数")
         return
 
-    sender.reply(f"正在登录 {len(account_list)} 个账号...")
+    amount = (price * Decimal(days) / Decimal(30) * len(accounts)).quantize(
+        Decimal("0.01"), rounding=ROUND_UP
+    )
+    if amount > 0 and not process_payment(amount, days, account_count=len(accounts)):
+        return
+
+    payment_text = (
+        f"支付 {amount} 元，授权 {days} 天" if amount > 0 else f"免费授权 {days} 天"
+    )
 
     success_count = 0
-    fail_count = 0
-    success_accounts = []
-
-    for idx, acc in enumerate(account_list):
-        if idx > 0:
-            time.sleep(2)
-        wid = acc['wid']
-        phone = acc['phone']
+    errors = []
+    for wid in accounts:
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        if not stored_wid:
+            errors.append(f"{mask_wid(wid)}：未找到账号")
+            continue
+        auth_time = calculate_auth_time(wid, days)
+        middleware.bucketSet(f"{BUCKET_PREFIX}.auth", wid, auth_time)
         try:
-            success, token, result = qh_login(wid, phone)
-            if not success:
-                sender.reply(f"{vorto_utils.mask_account(wid)} 登录失败: {result}")
-                fail_count += 1
+            submit_to_qinglong(str(stored_wid), user_id)
+            success_count += 1
+        except Exception as exc:
+            errors.append(f"{mask_wid(wid)}：提交青龙失败，{exc}")
+    report = (
+        "=====授权完成=====\n"
+        f"{payment_text}\n成功：{success_count} 个账号\n失败：{len(errors)} 个账号"
+    )
+    if errors:
+        report += "\n------------------\n" + "\n".join(errors[:5])
+    sender.reply(report)
+
+
+def show_ck(wid: str) -> None:
+    stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+    if stored_wid:
+        sender.reply(
+            f"====={FULL_SCRIPT_NAME}账号ck=====\n"
+            f"账号：{mask_wid(wid)}\nCK：{stored_wid}\n===================="
+        )
+    else:
+        sender.reply(f"❌ {mask_wid(wid)} 未绑定ck")
+
+
+def batch_login() -> None:
+    """交互式接收 wid，验证后保存，已授权账号同步青龙。"""
+    sender.reply(
+        "=====茄皇登录=====\n请输入 wid\n"
+        "支持多账号，每行一个，也可使用 & 分隔\n回复 q 退出"
+    )
+    user_input = sender.input(120000, 1, False)
+    if not user_input:
+        sender.reply("❌ 输入超时")
+        return
+    if user_input.strip().lower() == "q":
+        sender.reply("✅ 已取消登录")
+        return
+    try:
+        pending_accounts = parse_accounts(user_input)
+    except PluginError as exc:
+        sender.reply(f"❌ {exc}")
+        return
+    if not pending_accounts:
+        sender.reply("❌ 未检测到有效账号")
+        return
+    current_accounts = get_user_accounts()
+    success_count = added_count = updated_count = 0
+    errors = []
+    for index, wid in enumerate(pending_accounts, 1):
+        try:
+            login_account(wid)
+            middleware.bucketSet(f"{BUCKET_PREFIX}.token", wid, wid)
+            if wid in current_accounts:
+                updated_count += 1
+                status = "更新成功"
+            else:
+                current_accounts.append(wid)
+                added_count += 1
+                status = "登录成功"
+            save_user_accounts(current_accounts)
+            if is_authorized(wid):
+                submit_to_qinglong(wid, user_id)
+            else:
+                status += "，账号未授权，暂未提交青龙"
+            success_count += 1
+            sender.reply(f"[{index}/{len(pending_accounts)}] ✅ {mask_wid(wid)} {status}")
+        except Exception as exc:
+            errors.append(f"{mask_wid(wid)}：{exc}")
+            sender.reply(f"[{index}/{len(pending_accounts)}] ❌ {mask_wid(wid)} 处理失败")
+        if index < len(pending_accounts):
+            time.sleep(1)
+    report = (
+        "=====登录完成=====\n"
+        f"成功：{success_count} 个\n新增：{added_count} 个\n"
+        f"更新：{updated_count} 个\n失败：{len(errors)} 个"
+    )
+    if errors:
+        report += "\n------------------\n" + "\n".join(errors[:5])
+    sender.reply(report)
+
+
+def select_accounts(title: str) -> list[str]:
+    accounts = get_user_accounts()
+    if not accounts:
+        sender.reply("❌ 未绑定账号，请先发送“茄皇登录”")
+        return []
+    if len(accounts) == 1:
+        return accounts
+    menu = f"====={title}=====\n[0] 全部账号\n------------------\n"
+    for index, wid in enumerate(accounts, 1):
+        menu += f"[{index}] {mask_wid(wid)}\n"
+    menu += "------------------\n回复数字选择，回复 q 退出"
+    sender.reply(menu)
+    choice = sender.input(30000, 1, False)
+    if not choice or choice.lower() == "q":
+        return []
+    if not choice.isdigit():
+        sender.reply("❌ 请输入数字序号")
+        return []
+    index = int(choice)
+    if index == 0:
+        return accounts
+    if 1 <= index <= len(accounts):
+        return [accounts[index - 1]]
+    sender.reply("❌ 选择超出范围")
+    return []
+
+
+def query() -> None:
+    """查询一个或全部已绑定茄皇账号。"""
+    for wid in select_accounts("茄皇查询"):
+        auth_time = get_auth_time(wid)
+        if not auth_time:
+            sender.reply(f"❌ {mask_wid(wid)} 账号未授权")
+            continue
+        if not is_authorized(wid):
+            sender.reply(f"❌ {mask_wid(wid)} 授权已过期：{auth_time}")
+            continue
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        if not stored_wid:
+            sender.reply(f"❌ {mask_wid(wid)} 未找到账号")
+            continue
+        try:
+            details = query_account_details(str(stored_wid))
+            sender.reply(
+                f"====={FULL_SCRIPT_NAME}详情=====\n"
+                f"账号：{mask_wid(details['wid'])}\n"
+                f"昵称：{details['昵称']}\n"
+                f"能量：{details['能量']}\n"
+                f"番茄：{details['番茄']}\n"
+                f"阶段：{details['阶段']}\n"
+                f"经验：{details['经验']}\n"
+                f"任务：{details['任务']}\n"
+                f"授权到期：{auth_time}\n=================="
+            )
+        except Exception as exc:
+            sender.reply(f"❌ {mask_wid(wid)} 查询失败：{exc}")
+
+
+def execute() -> None:
+    """手动执行一个或全部已授权账号的完整任务。"""
+    for wid in select_accounts("茄皇执行"):
+        auth_time = get_auth_time(wid)
+        if not is_authorized(wid):
+            status = f"授权已过期：{auth_time}" if auth_time else "账号未授权"
+            sender.reply(f"❌ {mask_wid(wid)} {status}")
+            continue
+        try:
+            logs = run_account(wid)
+            sender.reply(f"====={FULL_SCRIPT_NAME}=====\n" + "\n".join(logs))
+        except Exception as exc:
+            sender.reply(f"❌ {mask_wid(wid)} 执行失败：{exc}")
+
+
+def delete_account(wid: str) -> None:
+    """删除插件账号并同步删除青龙变量。"""
+    delete_qinglong_env(wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}.token", wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}.auth", wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}.env_id", wid)
+    save_user_accounts([account for account in get_user_accounts() if account != wid])
+    sender.reply(f"✅ {mask_wid(wid)} 已删除")
+
+
+def manage_accounts() -> None:
+    """显示批量操作和授权状态。"""
+    accounts = get_user_accounts()
+    if not accounts:
+        sender.reply("❌ 未绑定账号，请先发送“茄皇登录”")
+        return
+    menu = (
+        "=====账号列表=====\n批量操作:\n"
+        "[00] 授权全部账号\n[01] 删除全部账号\n"
+        "[02] 查看全部账号ck\n[03] 执行全部账号\n"
+        "------------------\n账号列表:"
+    )
+    for index, wid in enumerate(accounts, 1):
+        auth_time = get_auth_time(wid)
+        if is_authorized(wid):
+            menu += f"\n[{index}] {mask_wid(wid)}\n    ✅ 已授权\n    授权到期: {auth_time}"
+        else:
+            status = "授权已过期" if auth_time else "未授权"
+            menu += f"\n[{index}] {mask_wid(wid)}\n    ❌ {status}"
+            if auth_time:
+                menu += f"\n    授权到期: {auth_time}"
+    menu += "\n------------------\n回复数字选择账号\n回复'q'退出"
+    sender.reply(menu)
+    choice = sender.input(60000, 1, False)
+    if not choice or choice.lower() == "q":
+        return
+    try:
+        if choice == "00":
+            authorize_accounts(accounts)
+        elif choice == "01":
+            for wid in list(accounts):
+                delete_account(wid)
+            sender.reply("✅ 已删除全部账号")
+        elif choice == "02":
+            for wid in accounts:
+                show_ck(wid)
+        elif choice == "03":
+            for wid in accounts:
+                if is_authorized(wid):
+                    sender.reply(f"====={mask_wid(wid)}=====\n" + "\n".join(run_account(wid)))
+        else:
+            if not choice.isdigit() or not 1 <= int(choice) <= len(accounts):
+                sender.reply("❌ 无效的账号序号")
+                return
+            show_account_menu(accounts[int(choice) - 1])
+    except Exception as exc:
+        sender.reply(f"❌ 操作失败：{exc}")
+
+
+def show_account_menu(wid: str) -> None:
+    auth_time = get_auth_time(wid)
+    auth_status = "✅ 已授权" if is_authorized(wid) else "❌ 未授权"
+    auth_info = f"\n    到期: {auth_time}" if auth_time else ""
+    sender.reply(
+        "=====账号操作=====\n"
+        f"账号: {mask_wid(wid)}\n状态: {auth_status}{auth_info}\n"
+        "------------------\n[1] 授权账号\n[2] 删除账号\n"
+        "[3] 查看账号ck\n[4] 重新提交青龙\n[5] 立即执行\n"
+        "------------------\n回复数字选择操作\n回复\"q\"退出"
+    )
+    action = sender.input(60000, 1, False)
+    if not action or action.lower() == "q":
+        return
+    try:
+        if action == "1":
+            authorize_accounts([wid])
+        elif action == "2":
+            delete_account(wid)
+        elif action == "3":
+            show_ck(wid)
+        elif action == "4":
+            if not is_authorized(wid):
+                sender.reply("❌ 账号未授权或授权已过期")
+                return
+            login_account(wid)
+            submit_to_qinglong(wid, user_id)
+            sender.reply("✅ 已重新提交青龙")
+        elif action == "5":
+            if not is_authorized(wid):
+                sender.reply("❌ 账号未授权或授权已过期")
+                return
+            sender.reply(f"====={FULL_SCRIPT_NAME}=====\n" + "\n".join(run_account(wid)))
+        else:
+            sender.reply("❌ 无效的操作")
+    except Exception as exc:
+        sender.reply(f"❌ 操作失败：{exc}")
+
+
+def push_notification(owner_id: str, message: str) -> None:
+    """向芳华模板支持的所有平台推送通知。"""
+    for platform in ("qq", "wx", "tg", "qx", "ipad"):
+        try:
+            middleware.push(platform, "", owner_id, "", message)
+        except Exception:
+            pass
+
+
+def cron_check() -> None:
+    """清理过期变量，执行有效账号任务并刷新青龙数据。"""
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+        accounts = parse_stored_accounts(owner_id)
+        for wid in accounts:
+            stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+            if not stored_wid:
+                continue
+            auth_time = get_auth_time(wid)
+            if not is_authorized(wid):
+                if auth_time:
+                    try:
+                        delete_qinglong_env(wid)
+                    except Exception:
+                        pass
+                    push_notification(
+                        owner_id,
+                        f"====={FULL_SCRIPT_NAME}账号通知=====\n"
+                        f"账号：{mask_wid(wid)}\n"
+                        f"消息：授权已于 {auth_time} 到期，青龙变量已清理",
+                    )
                 continue
 
-            # Save account to user list
-            current_value = middleware.bucketGet('s_qh_user', userid)
-            if not current_value:
-                middleware.bucketSet('s_qh_user', userid, str([wid]))
-            else:
-                accounts = eval(current_value)
-                if wid not in accounts:
-                    accounts.append(wid)
-                    middleware.bucketSet('s_qh_user', userid, str(accounts))
 
-            # Save wid+phone info
-            account_info = {"wid": wid, "phone": phone}
-            middleware.bucketSet('s_qh_token', wid, json.dumps(account_info))
-
+def grant_accounts(owner_id: str, accounts: list[str], days: int) -> tuple[int, list[str]]:
+    success_count = 0
+    errors = []
+    for wid in accounts:
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        if not stored_wid:
+            errors.append(f"{mask_wid(wid)}：未找到账号")
+            continue
+        try:
+            login_account(str(stored_wid))
+            auth_time = calculate_auth_time(wid, days)
+            middleware.bucketSet(f"{BUCKET_PREFIX}.auth", wid, auth_time)
+            submit_to_qinglong(str(stored_wid), owner_id)
             success_count += 1
-            success_accounts.append({'wid': wid, 'phone': phone, 'info': account_info})
-            sender.reply(f"{vorto_utils.mask_account(wid)} 登录成功")
-
-        except Exception as e:
-            sender.reply(f"{vorto_utils.mask_account(wid)} 异常: {str(e)}")
-            fail_count += 1
-
-    sender.reply(
-        f"=====登录完成=====\n"
-        f"成功: {success_count}个\n"
-        f"失败: {fail_count}个\n"
-        f"=================="
-    )
-
-    # Check auth status and trigger authorization for unauthed accounts
-    if success_accounts:
-        dqsj = datetime.now().strftime("%Y-%m-%d")
-        need_auth = []
-        for acc in success_accounts:
-            wid = acc['wid']
-            accountVip = middleware.bucketGet('s_qh_auth', wid)
-            if accountVip and accountVip > dqsj:
-                sender.reply(f"{vorto_utils.mask_account(wid)} 已授权，到期: {accountVip}")
-                update_ql_env(wid, acc['info'])
-            else:
-                need_auth.append(acc)
-
-        if need_auth:
-            sender.reply(f"\n{len(need_auth)} 个账号需要授权")
-            authorize_accounts([acc['wid'] for acc in need_auth])
+        except Exception as exc:
+            errors.append(f"{mask_wid(wid)}：授权失败，{exc}")
+    return success_count, errors
 
 
-def query_accounts():
-    """Query account info"""
-    if not uservalue:
-        sender.reply("=====未绑定账号=====\n❌ 未找到账号\n💡 发送 茄皇登录 绑定\n==================")
-        return
-
-    accounts = eval(uservalue)
-    account_list = "\n========选择账号=======\n[0] 全部账号"
-    for i, wid in enumerate(accounts, 1):
-        auth_time = middleware.bucketGet('s_qh_auth', wid)
-        if not auth_time:
-            auth_status = '未授权'
-        elif auth_time < str(datetime.now().date()):
-            auth_status = '已过期'
-        else:
-            auth_status = f'到期:{auth_time}'
-        account_list += f"\n[{i}]{vorto_utils.mask_account(wid)}({auth_status})"
-    account_list += "\n=====================\n支持多选，用逗号分隔\n回复\"q\"退出\n====================="
-    sender.reply(account_list)
-
-    choice = sender.input(120000, 1, False)
-    if not choice or choice.lower() == 'q':
-        sender.reply("✅ 已退出")
-        return
-
+def set_accounts_auth_date(
+    owner_id: str,
+    accounts: list[str],
+    auth_time: str,
+) -> tuple[int, list[str]]:
     try:
-        if choice == '0':
-            selected = accounts.copy()
-        else:
-            selected = [
-                accounts[int(idx.strip()) - 1]
-                for idx in choice.split(',')
-                if idx.strip().isdigit() and 0 <= int(idx.strip()) - 1 < len(accounts)
-            ]
-
-        if not selected:
-            sender.reply("❌ 未选择有效账号")
-            return
-
-        sender.reply(f"✅ 已选择 {len(selected)} 个账号，正在查询...")
-        for i, wid in enumerate(selected, 1):
-            if i > 1:
-                time.sleep(2)
-            try:
-                auth_time = middleware.bucketGet('s_qh_auth', wid)
-                auth_status = '已授权' if auth_time and auth_time >= str(datetime.now().date()) else '未授权'
-
-                # Try to login and fetch user resources
-                user_info_text = ""
-                account_info_str = middleware.bucketGet('s_qh_token', wid)
-                if account_info_str:
-                    try:
-                        account_info = json.loads(account_info_str)
-                        phone = account_info.get('phone', '')
-                        if phone:
-                            login_success, token, user_data = qh_login(wid, phone)
-                            if login_success and isinstance(user_data, dict):
-                                user_info_text = (
-                                    f"\n💧 水滴: {user_data.get('water_num', 0)}"
-                                    f"\n☀️ 阳光: {user_data.get('sun_num', 0)}"
-                                    f"\n🌱 种子: {user_data.get('seed_num', 0)}"
-                                    f"\n🍎 果实: {user_data.get('fruit_num', 0)}"
-                                )
-                    except:
-                        pass
-
-                sender.reply(
-                    f"=====账号信息[{i}/{len(selected)}]=====\n"
-                    f"📱 账号: {vorto_utils.mask_account(wid)}\n"
-                    f"🏷 状态: {auth_status}\n"
-                    f"📅 到期: {auth_time or '未授权'}{user_info_text}\n"
-                    f"=================="
-                )
-            except Exception as e:
-                sender.reply(f"=====查询失败=====\n❌ 错误: {str(e)}\n==================")
-
-        sender.reply("✅ 查询完成")
-    except Exception as e:
-        sender.reply(f"❌ 查询失败: {str(e)}")
-
-
-def manage_account():
-    """Manage accounts - authorize/delete/submit to panel"""
-    if not uservalue:
-        sender.reply("=====未绑定账号=====\n❌ 未找到账号\n==================")
-        return
-
-    accounts = eval(uservalue)
-    sender.reply(
-        "=====账号管理=====\n"
-        "[1] 授权账号\n"
-        "[2] 删除账号\n"
-        "[3] 提交青龙\n"
-        "------------------\n"
-        "回复数字选择\n"
-        "回复\"q\"退出\n"
-        "=================="
-    )
-    choice = sender.input(120000, 1, False)
-    if not choice or choice.lower() == 'q':
-        sender.reply("✅ 已退出")
-        return
-
-    # Show account selection list
-    account_list = "\n========选择账号=======\n[0] 全部账号"
-    for i, wid in enumerate(accounts, 1):
-        auth_time = middleware.bucketGet('s_qh_auth', wid)
-        if not auth_time:
-            auth_status = '未授权'
-        elif auth_time < str(datetime.now().date()):
-            auth_status = '已过期'
-        else:
-            auth_status = f'到期:{auth_time}'
-        account_list += f"\n[{i}]{vorto_utils.mask_account(wid)}({auth_status})"
-    account_list += "\n=====================\n支持多选，用逗号分隔\n回复\"q\"退出\n====================="
-    sender.reply(account_list)
-
-    account_choice = sender.input(120000, 1, False)
-    if not account_choice or account_choice.lower() == 'q':
-        sender.reply("✅ 已退出")
-        return
-
-    if account_choice == '0':
-        selected = accounts.copy()
-    else:
-        selected = [
-            accounts[int(idx.strip()) - 1]
-            for idx in account_choice.split(',')
-            if idx.strip().isdigit() and 0 <= int(idx.strip()) - 1 < len(accounts)
-        ]
-
-    if not selected:
-        sender.reply("❌ 未选择有效账号")
-        return
-
-    sender.reply(f"✅ 已选择 {len(selected)} 个账号")
-
-    if choice == '1':
-        authorize_accounts(selected)
-    elif choice == '2':
-        sender.reply("=====确认删除=====\n⚠️ 此操作不可恢复\n回复 y 确认删除\n==================")
-        confirm = sender.input(120000, 1, False)
-        if confirm and confirm.lower() == 'y':
-            for wid in selected:
-                if wid in accounts:
-                    accounts.remove(wid)
-                middleware.bucketDel('s_qh_token', wid)
-                middleware.bucketDel('s_qh_auth', wid)
-                delete_ql_env(wid)
-
-            if accounts:
-                middleware.bucketSet('s_qh_user', userid, str(accounts))
-            else:
-                middleware.bucketDel('s_qh_user', userid)
-            sender.reply(f"✅ 已删除 {len(selected)} 个账号")
-        else:
-            sender.reply("✅ 已取消")
-    elif choice == '3':
-        success = 0
-        for wid in selected:
-            try:
-                account_info = json.loads(middleware.bucketGet('s_qh_token', wid))
-                auth_time = middleware.bucketGet('s_qh_auth', wid)
-                if auth_time and auth_time >= str(datetime.now().date()):
-                    if update_ql_env(wid, account_info):
-                        success += 1
-            except:
-                pass
-        sender.reply(
-            f"=====提交结果=====\n"
-            f"✅ 成功: {success}个\n"
-            f"❌ 失败: {len(selected) - success}个\n"
-            f"=================="
-        )
-
-
-# ==================== Payment & Authorization ====================
-
-def authorize_accounts(wids):
-    """Unified authorization flow with payment selection"""
-    account_infos = []
-    for wid in wids:
+        datetime.strptime(auth_time, "%Y-%m-%d")
+    except ValueError as exc:
+        raise PluginError("授权日期格式应为 YYYY-MM-DD") from exc
+    success_count = 0
+    errors = []
+    for wid in accounts:
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        if not stored_wid:
+            errors.append(f"{mask_wid(wid)}：未找到账号")
+            continue
+        middleware.bucketSet(f"{BUCKET_PREFIX}.auth", wid, auth_time)
         try:
-            account_infos.append({
-                'wid': wid,
-                'info': json.loads(middleware.bucketGet('s_qh_token', wid))
-            })
-        except:
-            pass
+            submit_to_qinglong(str(stored_wid), owner_id)
+            success_count += 1
+        except Exception as exc:
+            errors.append(f"{mask_wid(wid)}：同步失败，{exc}")
+    return success_count, errors
 
-    if not account_infos:
-        sender.reply("❌ 没有有效账号")
-        return
 
-    sender.reply(
-        f"✅ {len(account_infos)} 个有效账号\n"
-        f"=====设置授权时长=====\n"
-        f"请输入授权月数(如:1)\n"
-        f"回复\"q\"退出\n"
-        f"=================="
-    )
-    months_input = sender.input(120000, 1, False)
-    if not months_input or months_input.lower() == 'q':
-        sender.reply("✅ 已取消")
-        return
-
+def parse_stored_accounts(owner_id: str) -> list[str]:
+    raw = middleware.bucketGet(f"{BUCKET_PREFIX}.user", owner_id) or "[]"
     try:
-        months = int(months_input)
-        if months <= 0:
-            sender.reply("❌ 月数必须大于0")
-            return
+        accounts = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return [str(wid) for wid in accounts] if isinstance(accounts, list) else []
 
-        Vipmoney = float(middleware.bucketGet('s_qh', 'Vipmoney') or '1')
-        total_money = len(account_infos) * months * Vipmoney
-        coin = int(middleware.bucketGet('s_qh', 'coin') or '0')
 
-        # Build available payment methods from Vorto config
-        pay_config = vorto_utils.get_pay_config()
-        available = []
-
-        if pay_config['qr_pay_switch']:
-            available.append(("扫码支付", "qrcode"))
-        if pay_config['ma_pay_switch']:
-            pay_types = pay_config['pay_types']
-            if not pay_types:
-                sender.reply("⚠️ 未配置码支付方式，请联系管理员在Vorto初始化中填写")
-            else:
-                for pay_key, pay_name in pay_types.items():
-                    available.append((f"{pay_name}(码支付)", f"mapay_{pay_key}"))
-        if coin > 0:
-            available.append(("积分兑换", "coin"))
-
-        if not available:
-            sender.reply("❌ 未配置支付方式，请联系管理员在Vorto初始化中开启")
-            return
-
-        # Select payment method
-        if len(available) == 1:
-            payment_name, payment_type = available[0]
-        else:
-            menu = (
-                f"=====选择支付方式=====\n"
-                f"📊 账号: {len(account_infos)}个\n"
-                f"⏰ 时长: {months}月\n"
-                f"💰 金额: {total_money}元\n"
-                f"------------------------"
-            )
-            for i, (name, _) in enumerate(available, 1):
-                menu += f"\n[{i}] {name}"
-            menu += "\n------------------------\n回复数字选择\n=================="
-            sender.reply(menu)
-
-            pay_choice = sender.input(120000, 1, False)
-            if not pay_choice or pay_choice.lower() == 'q':
-                sender.reply("✅ 已取消")
-                return
-
-            pay_idx = int(pay_choice) - 1
-            if 0 <= pay_idx < len(available):
-                payment_name, payment_type = available[pay_idx]
-            else:
-                sender.reply("❌ 无效选择")
-                return
-
-        # Execute payment and authorize
-        if payment_type == 'coin':
-            for acc in account_infos:
-                vorto_utils.process_coin_payment(
-                    sender, userid, 's_qh_auth', acc['wid'], acc['info'],
-                    months=months, coin_per_month=coin,
-                    auth_callback=lambda a, info, m: vorto_utils.process_authorization(
-                        sender, 's_qh_auth', a, info, m, update_ql_callback=update_ql_env
-                    )
-                )
-        elif payment_type.startswith('mapay_'):
-            if _process_mapay_payment(PLUGIN_CONFIG['name'], months, total_money, payment_type.replace('mapay_', '')):
-                for acc in account_infos:
-                    vorto_utils.process_authorization(
-                        sender, 's_qh_auth', acc['wid'], acc['info'], months,
-                        update_ql_callback=update_ql_env
-                    )
-        elif payment_type == 'qrcode':
-            if _process_qrcode_payment(PLUGIN_CONFIG['name'], months, total_money):
-                for acc in account_infos:
-                    vorto_utils.process_authorization(
-                        sender, 's_qh_auth', acc['wid'], acc['info'], months,
-                        update_ql_callback=update_ql_env
-                    )
+def admin_auth_all_users() -> None:
+    sender.reply(
+        "=====批量授权=====\n请输入授权天数\n"
+        "------------------\n回复数字设置天数\n回复 q 退出"
+    )
+    days_text = sender.input(60000, 1, False)
+    if not days_text or days_text.lower() == "q":
+        sender.reply("✅ 已取消授权")
+        return
+    try:
+        days = int(days_text)
+        if days <= 0:
+            raise ValueError
     except ValueError:
-        sender.reply("❌ 请输入有效数字")
-
-
-def _process_qrcode_payment(project, months, money):
-    """QR code payment via Vorto config"""
-    if float(money) == 0:
-        return True
-
-    pay_config = vorto_utils.get_pay_config()
-    zsm = pay_config['zsm']
-    if not zsm:
-        sender.reply('❌ 未配置收款码，请联系管理员')
-        return False
-
-    sender.reply(
-        f"======扫码支付======\n"
-        f"🎫 商品: {project}\n"
-        f"📅 时长: {months}月\n"
-        f"💰 金额: {money}元\n"
-        f"=================="
-    )
-    sender.replyImage(zsm)
-
-    ddzf = sender.waitPay("q", 300000)
-    if str(ddzf) == 'q':
-        sender.reply('✅ 已取消')
-        return False
-
-    try:
-        if isinstance(ddzf, str):
-            ddzf = json.loads(ddzf)
-        if float(ddzf.get('Money') or ddzf.get('money', 0)) >= float(money):
-            return True
-        sender.reply("❌ 支付金额不足")
-        return False
-    except:
-        sender.reply("❌ 支付验证失败")
-        return False
-
-
-def _process_mapay_payment(project, months, money, pay_type='alipay'):
-    """MaPay payment via vorto_utils.MaPayClient"""
-    if float(money) == 0:
-        return True
-
-    pay_config = vorto_utils.get_pay_config()
-    if not pay_config['ma_pay_switch']:
-        sender.reply("❌ 码支付功能未开启")
-        return False
-
-    try:
-        out_trade_no = f"QH{datetime.now().strftime('%Y%m%d%H%M%S')}{random.randint(10000, 99999)}"
-        pay_type_name = pay_config['pay_types'].get(pay_type, '支付宝')
-
-        sender.reply(
-            f"=====码支付信息=====\n"
-            f"🎫 商品: {project}\n"
-            f"📅 时长: {months}月\n"
-            f"💰 金额: {money}元\n"
-            f"💳 方式: {pay_type_name}\n"
-            f"=================="
-        )
-
-        mapay = vorto_utils.MaPayClient()
-        order = mapay.create_order(float(money), pay_type, out_trade_no, f"{project}-{money}", userid)
-
-        if order.get('error'):
-            sender.reply(f"❌ 创建订单失败: {order.get('error')}")
-            return False
-
-        pay_url = order.get('pay_url')
-        qr_url = vorto_utils.generate_qrcode_url(pay_url)
-        sender.replyImage(qr_url)
-        sender.reply(f'💳 请使用【{pay_type_name}】扫码支付\n⏰ 5分钟内完成支付\n输入"q"可取消')
-
-        start_time = time.time()
-        timeout = 300
-
-        while time.time() - start_time < timeout:
-            user_input = sender.input(5000, 1, False)
-            if user_input and user_input.lower() == 'q':
-                sender.reply("✅ 已取消支付")
-                return False
-            if mapay.is_paid(out_trade_no):
-                sender.reply("✅ 支付成功！")
-                return True
-
-        sender.reply("❌ 支付超时")
-        return False
-
-    except Exception as e:
-        sender.reply(f"❌ 支付异常: {str(e)}")
-        return False
-
-
-# ==================== Admin Functions ====================
-
-def ks_auth():
-    """Admin authorization via vorto_utils"""
-    if not sender.isAdmin():
-        sender.reply("❌ 仅限管理员")
+        sender.reply("❌ 授权天数必须是正整数")
         return
-
-    sender.reply(
-        "=====管理员授权=====\n"
-        "[1] 授权所有用户\n"
-        "[2] 按用户授权\n"
-        "------------------\n"
-        "回复数字选择操作\n"
-        "回复\"q\"退出"
+    success_count = user_count = 0
+    errors = []
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+        accounts = parse_stored_accounts(owner_id)
+        if not accounts:
+            continue
+        user_count += 1
+        current_success, current_errors = grant_accounts(owner_id, accounts, days)
+        success_count += current_success
+        errors.extend(current_errors)
+    report = (
+        "=====授权完成=====\n"
+        f"用户：{user_count} 个\n成功：{success_count} 个账号\n"
+        f"失败：{len(errors)} 个账号\n授权：{days} 天"
     )
-    choice = sender.input(120000, 1, False)
-    if not choice or choice.lower() == 'q':
-        sender.reply("✅ 已退出")
+    if errors:
+        report += "\n------------------\n" + "\n".join(errors[:5])
+    sender.reply(report)
+
+
+def admin_auth_specific_user() -> None:
+    sender.reply("=====指定授权=====\n请输入用户ID\n------------------\n回复 q 退出")
+    owner_id = sender.input(60000, 1, False)
+    if not owner_id or owner_id.lower() == "q":
         return
-
-    if choice == '1':
-        vorto_utils.admin_auth_all_accounts(
-            sender, 's_qh_user', 's_qh_auth', 's_qh_token',
-            update_ql_callback=update_ql_env
-        )
-    elif choice == '2':
-        vorto_utils.admin_auth_by_user(
-            sender, 's_qh_user', 's_qh_auth', 's_qh_token',
-            update_ql_callback=update_ql_env
-        )
-    else:
-        sender.reply("❌ 无效选择")
-
-
-# ==================== Tutorial ====================
-
-def show_tutorial():
-    """Show usage tutorial"""
-    sender.reply(
-        "=====茄皇教程=====\n"
-        "用户指令:\n"
-        "• 茄皇登录 - 批量绑定茄皇账号\n"
-        "• 茄皇查询 - 查询账号状态和资源信息\n"
-        "• 茄皇管理 - 授权/删除/提交青龙\n"
-        "• 茄皇教程 - 查看本教程\n"
-        "------------------\n"
-        "管理员指令:\n"
-        "• 茄皇授权 - 管理员按天数授权\n"
-        "• 茄皇检测 - 检测过期账号并清理\n"
-        "------------------\n"
-        "登录格式:\n"
-        "wid#phone（每行一个账号）\n"
-        "例如: 11287477859#18150271020\n"
-        "------------------\n"
-        "wid获取方式:\n"
-        "入口：小程序\"统一梦时代\"\n"
-        "个人中心授权后点头像，复制\"客户编号\"\n"
-        "------------------\n"
-        "功能说明:\n"
-        "• 账号绑定: 保存wid和phone到系统\n"
-        "• 状态查询: 查看水滴/阳光/种子/果实等\n"
-        "• 授权管理: 付费使用插件功能\n"
-        "• 青龙提交: 自动提交到青龙容器\n"
-        "• 过期检测: 自动清理过期账号\n"
-        "------------------\n"
-        "使用流程:\n"
-        "1. 发送\"茄皇登录\"绑定账号\n"
-        "2. 发送\"茄皇查询\"查看账号状态\n"
-        "3. 发送\"茄皇管理\"选择授权账号\n"
-        "4. 选择授权时长并完成支付\n"
-        "5. 系统自动提交到青龙容器\n"
-        "6. 等待定时任务自动执行签到\n"
-        "=================="
+    accounts = parse_stored_accounts(owner_id)
+    if not accounts:
+        sender.reply("❌ 未找到该用户的账号")
+        return
+    menu = (
+        "=====账号列表=====\n[00] 授权全部账号\n"
+        "[01] 修改全部账号授权日期\n------------------"
     )
-
-
-# ==================== Main Entry ====================
-
-def main():
-    """Main entry point"""
-    msg = sender.getMessage()
-
-    if '登录' in msg or '登陆' in msg:
-        bind_account()
-    elif '查询' in msg and ('茄皇' in msg or 'qh' in msg.lower()):
-        query_accounts()
-    elif '管理' in msg and ('茄皇' in msg or 'qh' in msg.lower()):
-        manage_account()
-    elif '教程' in msg and ('茄皇' in msg or 'qh' in msg.lower()):
-        show_tutorial()
-    elif '茄皇授权' in msg:
-        ks_auth()
-    elif '茄皇检测' in msg:
-        if not sender.isAdmin():
-            sender.reply("❌ 仅限管理员")
+    for index, wid in enumerate(accounts, 1):
+        auth_time = get_auth_time(wid)
+        status = "✅ 已授权" if is_authorized(wid) else "❌ 未授权"
+        menu += f"\n[{index}] {mask_wid(wid)}\n    {status}"
+        if auth_time:
+            menu += f"\n    授权到期: {auth_time}"
+    menu += "\n------------------\n回复数字选择账号\n回复 q 退出"
+    sender.reply(menu)
+    choice = sender.input(60000, 1, False)
+    if not choice or choice.lower() == "q":
+        return
+    if choice == "01":
+        sender.reply("请输入新的授权日期，格式：2030-02-16")
+        auth_time = sender.input(60000, 1, False)
+        if not auth_time or auth_time.lower() == "q":
             return
-        sender.reply("🔍 正在检测...")
-        result = vorto_utils.check_auth_status(
-            's_qh', 's_qh_user', 's_qh_auth', 's_qh_token',
-            '茄皇的家', delete_ql_callback=delete_ql_env
-        )
-        sender.reply(result)
-    # Cron task - auto check and clean expired accounts
-    elif sender.getImtype() == 'fake':
         try:
-            result = vorto_utils.check_auth_status(
-                's_qh', 's_qh_user', 's_qh_auth', 's_qh_token',
-                '茄皇的家', delete_ql_callback=delete_ql_env
-            )
-            middleware.notifyMasters(result)
-        except:
-            pass
+            success_count, errors = set_accounts_auth_date(owner_id, accounts, auth_time)
+        except PluginError as exc:
+            sender.reply(f"❌ {exc}")
+            return
+        sender.reply(
+            f"✅ 已修改 {success_count} 个账号，到期日期：{auth_time}"
+            + (f"\n失败：{len(errors)} 个" if errors else "")
+        )
+        return
+    if choice == "00":
+        selected_accounts = accounts
+    elif choice.isdigit() and 1 <= int(choice) <= len(accounts):
+        selected_accounts = [accounts[int(choice) - 1]]
     else:
-        sender.setContinue()
+        sender.reply("❌ 无效的账号序号")
+        return
+    sender.reply("请输入授权天数，例如 30")
+    days_text = sender.input(60000, 1, False)
+    try:
+        days = int(days_text)
+        if days <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        sender.reply("❌ 授权天数必须是正整数")
+        return
+    success_count, errors = grant_accounts(owner_id, selected_accounts, days)
+    sender.reply(
+        f"✅ 已授权 {success_count} 个账号 {days} 天"
+        + (f"\n失败：{len(errors)} 个" if errors else "")
+    )
+
+
+def update_all_qinglong_envs() -> None:
+    user_count = account_count = success_count = 0
+    errors = []
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+        accounts = parse_stored_accounts(owner_id)
+        if not accounts:
+            continue
+        user_count += 1
+        for wid in accounts:
+            account_count += 1
+            if not is_authorized(wid):
+                continue
+            stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+            if not stored_wid:
+                errors.append(f"{mask_wid(wid)}：未找到账号")
+                continue
+            try:
+                submit_to_qinglong(str(stored_wid), owner_id)
+                success_count += 1
+            except Exception as exc:
+                errors.append(f"{mask_wid(wid)}：{exc}")
+    sender.reply(
+        "=====更新青龙完成=====\n"
+        f"用户：{user_count} 个\n账号：{account_count} 个\n"
+        f"成功：{success_count} 个\n失败：{len(errors)} 个"
+    )
+
+
+def admin_auth() -> None:
+    if not sender.isAdmin():
+        sender.reply("❌ 需要管理员权限")
+        return
+    sender.reply(
+        "=====授权管理=====\n[1] 一键授权所有用户\n"
+        "[2] 指定用户授权\n[3] 更新青龙环境变量\n"
+        "------------------\n回复数字选择功能\n回复 q 退出"
+    )
+    choice = sender.input(60000, 1, False)
+    if not choice or choice.lower() == "q":
+        return
+    if choice == "1":
+        admin_auth_all_users()
+    elif choice == "2":
+        admin_auth_specific_user()
+    elif choice == "3":
+        update_all_qinglong_envs()
+    else:
+        sender.reply("❌ 无效的选择")
+
+
+def clean_expired_accounts() -> None:
+    if not sender.isAdmin():
+        sender.reply("❌ 需要管理员权限")
+        return
+    cleaned_count = 0
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+        accounts = parse_stored_accounts(owner_id)
+        valid_accounts = []
+        for wid in accounts:
+            auth_time = get_auth_time(wid)
+            if auth_time and not is_authorized(wid):
+                try:
+                    delete_qinglong_env(wid)
+                except Exception:
+                    pass
+                middleware.bucketDel(f"{BUCKET_PREFIX}.token", wid)
+                middleware.bucketDel(f"{BUCKET_PREFIX}.auth", wid)
+                middleware.bucketDel(f"{BUCKET_PREFIX}.env_id", wid)
+                cleaned_count += 1
+            else:
+                valid_accounts.append(wid)
+        if valid_accounts:
+            middleware.bucketSet(
+                f"{BUCKET_PREFIX}.user",
+                owner_id,
+                json.dumps(valid_accounts, ensure_ascii=False),
+            )
+        else:
+            middleware.bucketDel(f"{BUCKET_PREFIX}.user", owner_id)
+    sender.reply(f"✅ 已清理 {cleaned_count} 个过期账号")
+
+
+def tutorial() -> None:
+    sender.reply(
+        f"====={FULL_SCRIPT_NAME}教程=====\n"
+        "1. 扫码进入小程序-个人中心-客户编号就是wid\n"
+        "2. 发送“茄皇登录”，按 wid 格式绑定\n"
+        "3. 授权后会自动写入青龙 QH 环境变量\n"
+        "4. 发送“茄皇执行”可立即运行全部任务\n"
+        "5. 授权费用：1元/月或 300积分/月\n"
+        "6. 项目收益：几个月可以兑换泡面\n"
+        "===================="
+    )
+    tutorial_image = middleware.bucketGet(BUCKET_PREFIX, "tutorial_image")
+    if tutorial_image:
+        sender.replyImage(str(tutorial_image))
+    sender.reply(
+        "=====茄皇可用指令=====\n"
+        "茄皇教程：查看使用教程\n"
+        "茄皇登录：验证并绑定账号\n"
+        "茄皇查询：查询能量、番茄、阶段和任务\n"
+        "茄皇执行：执行签到、任务、好友能量和能量使用\n"
+        "茄皇管理：授权、查看 CK、同步或删除账号\n"
+        "--------------------\n管理员指令：茄皇授权、茄皇清理\n"
+        "===================="
+    )
+
+
+def main() -> None:
+    message = sender.getMessage()
+    if "登录" in message or "登陆" in message or "上车" in message:
+        batch_login()
+    elif "查询" in message:
+        query()
+    elif "执行" in message or "运行" in message:
+        execute()
+    elif "管理" in message:
+        manage_accounts()
+    elif message == f"{SCRIPT_NAME}授权":
+        admin_auth()
+    elif message == f"{SCRIPT_NAME}清理":
+        clean_expired_accounts()
+    elif "教程" in message:
+        tutorial()
+    else:
+        tutorial()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        if sender.getImtype() == "fake":
+            cron_check()
+        else:
+            main()
+    except Exception as exc:
+        sender.reply(f"❌ 运行出错：{exc}")
