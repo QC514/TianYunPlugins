@@ -5,7 +5,7 @@
 # [service: 68025408]
 # [disable: false]
 # [admin: false]
-# [rule: ^芳华|芳华..|..芳华$]
+# [rule: ^(芳华|芳华..|..芳华)$]
 # [cron: 26 8,18 * * *]
 # [priority: 1]
 # [platform: all]
