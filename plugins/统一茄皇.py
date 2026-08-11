@@ -2,7 +2,7 @@
 # [title: 茄皇]
 # [language: python]
 # [class: 工具类]
-# [service: 作者：qingyun]
+# [service: 68025408]
 # [disable: false]
 # [admin: false]
 # [rule: ^茄皇(.*)|(.*)茄皇$]
@@ -14,7 +14,6 @@
 # [public: false]
 # [price: 0]
 # [description: 茄皇五期账号管理插件。账号格式为 wid，支持批量登录验证、账号查询、统一收银台授权、账号管理、提交青龙和立即执行。执行保留签到、浏览、分享、好友能量收取、能量使用和结果通知全部功能。<br>指令：茄皇（登录|查询|执行|管理|教程）。<br>青龙环境变量固定为 QH，wid、所属用户和授权时间写入备注。<br>1.1.0更新：授权支付接入清蕴统一收银台（参考饿了么/幸运星/太平洋）。]
-
 # [param: {"required":true,"key":"qingyun_qh.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
 # [param: {"required":false,"key":"qingyun_qh.price","bool":false,"placeholder":"1","name":"授权价格","desc":"单账号授权30天的价格，单位为元"}]
 # [param: {"required":false,"key":"qingyun_qh.is_proxy","bool":true,"placeholder":"","name":"启用代理","desc":"是否为茄皇接口启用代理"}]
@@ -112,7 +111,7 @@ def parse_accounts(text: str) -> list[str]:
 
 
 def get_user_accounts() -> list[str]:
-    raw = middleware.bucketGet(f"{BUCKET_PREFIX}.user", user_id) or "[]"
+    raw = middleware.bucketGet(f"{BUCKET_PREFIX}_user", user_id) or "[]"
     try:
         result = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
@@ -122,7 +121,7 @@ def get_user_accounts() -> list[str]:
 
 def save_user_accounts(accounts: list[str]) -> None:
     middleware.bucketSet(
-        f"{BUCKET_PREFIX}.user",
+        f"{BUCKET_PREFIX}_user",
         user_id,
         json.dumps(accounts, ensure_ascii=False),
     )
@@ -506,7 +505,7 @@ def submit_to_qinglong(wid: str, owner_id: str) -> bool:
         if f"账号:{wid}丨" in remarks or str(env.get("value", "")) == wid:
             target_env = env
             break
-    auth_time = middleware.bucketGet(f"{BUCKET_PREFIX}.auth", wid) or "未授权"
+    auth_time = middleware.bucketGet(f"{BUCKET_PREFIX}_auth", wid) or "未授权"
     remarks = f"{FULL_SCRIPT_NAME}账号:{wid}丨用户:{owner_id}丨授权时间:{auth_time}"
     data: dict[str, Any] = {"name": QL_ENV_NAME, "value": wid, "remarks": remarks}
     if target_env:
@@ -521,7 +520,7 @@ def submit_to_qinglong(wid: str, owner_id: str) -> bool:
     if isinstance(new_envs, list) and new_envs:
         env_id = get_env_id(new_envs[0])
         if env_id is not None:
-            middleware.bucketSet(f"{BUCKET_PREFIX}.env_id", wid, str(env_id))
+            middleware.bucketSet(f"{BUCKET_PREFIX}_env_id", wid, str(env_id))
     return True
 
 
@@ -539,12 +538,12 @@ def delete_qinglong_env(wid: str) -> bool:
                 ids_to_delete.append(env_id)
     if ids_to_delete:
         send_request("DELETE", f"{url}/open/envs", headers=headers, json=ids_to_delete)
-    middleware.bucketDel(f"{BUCKET_PREFIX}.env_id", wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}_env_id", wid)
     return True
 
 
 def get_auth_time(wid: str) -> str:
-    return str(middleware.bucketGet(f"{BUCKET_PREFIX}.auth", wid) or "")
+    return str(middleware.bucketGet(f"{BUCKET_PREFIX}_auth", wid) or "")
 
 
 def is_authorized(wid: str) -> bool:
@@ -662,12 +661,12 @@ def authorize_accounts(accounts: list[str]) -> None:
     success_count = 0
     errors = []
     for wid in accounts:
-        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
         if not stored_wid:
             errors.append(f"{mask_wid(wid)}：未找到账号")
             continue
         auth_time = calculate_auth_time(wid, days)
-        middleware.bucketSet(f"{BUCKET_PREFIX}.auth", wid, auth_time)
+        middleware.bucketSet(f"{BUCKET_PREFIX}_auth", wid, auth_time)
         try:
             submit_to_qinglong(str(stored_wid), user_id)
             success_count += 1
@@ -683,7 +682,7 @@ def authorize_accounts(accounts: list[str]) -> None:
 
 
 def show_ck(wid: str) -> None:
-    stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+    stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
     if stored_wid:
         sender.reply(
             f"====={FULL_SCRIPT_NAME}账号ck=====\n"
@@ -720,7 +719,7 @@ def batch_login() -> None:
     for index, wid in enumerate(pending_accounts, 1):
         try:
             login_account(wid)
-            middleware.bucketSet(f"{BUCKET_PREFIX}.token", wid, wid)
+            middleware.bucketSet(f"{BUCKET_PREFIX}_token", wid, wid)
             if wid in current_accounts:
                 updated_count += 1
                 status = "更新成功"
@@ -787,7 +786,7 @@ def query() -> None:
         if not is_authorized(wid):
             sender.reply(f"❌ {mask_wid(wid)} 授权已过期：{auth_time}")
             continue
-        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
         if not stored_wid:
             sender.reply(f"❌ {mask_wid(wid)} 未找到账号")
             continue
@@ -826,9 +825,9 @@ def execute() -> None:
 def delete_account(wid: str) -> None:
     """删除插件账号并同步删除青龙变量。"""
     delete_qinglong_env(wid)
-    middleware.bucketDel(f"{BUCKET_PREFIX}.token", wid)
-    middleware.bucketDel(f"{BUCKET_PREFIX}.auth", wid)
-    middleware.bucketDel(f"{BUCKET_PREFIX}.env_id", wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}_token", wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}_auth", wid)
+    middleware.bucketDel(f"{BUCKET_PREFIX}_env_id", wid)
     save_user_accounts([account for account in get_user_accounts() if account != wid])
     sender.reply(f"✅ {mask_wid(wid)} 已删除")
 
@@ -932,10 +931,10 @@ def push_notification(owner_id: str, message: str) -> None:
 
 def cron_check() -> None:
     """清理过期变量，执行有效账号任务并刷新青龙数据。"""
-    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}_user"):
         accounts = parse_stored_accounts(owner_id)
         for wid in accounts:
-            stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+            stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
             if not stored_wid:
                 continue
             auth_time = get_auth_time(wid)
@@ -958,14 +957,14 @@ def grant_accounts(owner_id: str, accounts: list[str], days: int) -> tuple[int, 
     success_count = 0
     errors = []
     for wid in accounts:
-        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
         if not stored_wid:
             errors.append(f"{mask_wid(wid)}：未找到账号")
             continue
         try:
             login_account(str(stored_wid))
             auth_time = calculate_auth_time(wid, days)
-            middleware.bucketSet(f"{BUCKET_PREFIX}.auth", wid, auth_time)
+            middleware.bucketSet(f"{BUCKET_PREFIX}_auth", wid, auth_time)
             submit_to_qinglong(str(stored_wid), owner_id)
             success_count += 1
         except Exception as exc:
@@ -985,11 +984,11 @@ def set_accounts_auth_date(
     success_count = 0
     errors = []
     for wid in accounts:
-        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+        stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
         if not stored_wid:
             errors.append(f"{mask_wid(wid)}：未找到账号")
             continue
-        middleware.bucketSet(f"{BUCKET_PREFIX}.auth", wid, auth_time)
+        middleware.bucketSet(f"{BUCKET_PREFIX}_auth", wid, auth_time)
         try:
             submit_to_qinglong(str(stored_wid), owner_id)
             success_count += 1
@@ -999,7 +998,7 @@ def set_accounts_auth_date(
 
 
 def parse_stored_accounts(owner_id: str) -> list[str]:
-    raw = middleware.bucketGet(f"{BUCKET_PREFIX}.user", owner_id) or "[]"
+    raw = middleware.bucketGet(f"{BUCKET_PREFIX}_user", owner_id) or "[]"
     try:
         accounts = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
@@ -1025,7 +1024,7 @@ def admin_auth_all_users() -> None:
         return
     success_count = user_count = 0
     errors = []
-    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}_user"):
         accounts = parse_stored_accounts(owner_id)
         if not accounts:
             continue
@@ -1108,7 +1107,7 @@ def admin_auth_specific_user() -> None:
 def update_all_qinglong_envs() -> None:
     user_count = account_count = success_count = 0
     errors = []
-    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}_user"):
         accounts = parse_stored_accounts(owner_id)
         if not accounts:
             continue
@@ -1117,7 +1116,7 @@ def update_all_qinglong_envs() -> None:
             account_count += 1
             if not is_authorized(wid):
                 continue
-            stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}.token", wid)
+            stored_wid = middleware.bucketGet(f"{BUCKET_PREFIX}_token", wid)
             if not stored_wid:
                 errors.append(f"{mask_wid(wid)}：未找到账号")
                 continue
@@ -1160,7 +1159,7 @@ def clean_expired_accounts() -> None:
         sender.reply("❌ 需要管理员权限")
         return
     cleaned_count = 0
-    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}.user"):
+    for owner_id in middleware.bucketAllKeys(f"{BUCKET_PREFIX}_user"):
         accounts = parse_stored_accounts(owner_id)
         valid_accounts = []
         for wid in accounts:
@@ -1170,20 +1169,20 @@ def clean_expired_accounts() -> None:
                     delete_qinglong_env(wid)
                 except Exception:
                     pass
-                middleware.bucketDel(f"{BUCKET_PREFIX}.token", wid)
-                middleware.bucketDel(f"{BUCKET_PREFIX}.auth", wid)
-                middleware.bucketDel(f"{BUCKET_PREFIX}.env_id", wid)
+                middleware.bucketDel(f"{BUCKET_PREFIX}_token", wid)
+                middleware.bucketDel(f"{BUCKET_PREFIX}_auth", wid)
+                middleware.bucketDel(f"{BUCKET_PREFIX}_env_id", wid)
                 cleaned_count += 1
             else:
                 valid_accounts.append(wid)
         if valid_accounts:
             middleware.bucketSet(
-                f"{BUCKET_PREFIX}.user",
+                f"{BUCKET_PREFIX}_user",
                 owner_id,
                 json.dumps(valid_accounts, ensure_ascii=False),
             )
         else:
-            middleware.bucketDel(f"{BUCKET_PREFIX}.user", owner_id)
+            middleware.bucketDel(f"{BUCKET_PREFIX}_user", owner_id)
     sender.reply(f"✅ 已清理 {cleaned_count} 个过期账号")
 
 
