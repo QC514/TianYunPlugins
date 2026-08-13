@@ -4719,22 +4719,6 @@
   "admin": true,
   "disable": true
  },
- "plugins/雨云_By.sky2022.py": {
-  "id": "雨云_2",
-  "name": "雨云_2",
-  "title": "雨云",
-  "type": "python",
-  "path": "plugins/雨云_By.sky2022.py",
-  "version": "v1.1.1",
-  "desc": "指令:雨云登陆 雨云查询 雨云管理 支持账号#密码登陆，支持多账号管理丨定时任务：每天8点和15点自动检测授权过期及CK失效并推送通知丨V1.1.1:新增定时检测推送，每天8点/15点自动检测授权到期和账号失效状态并通知用户丨V1.1.0:统一面板配置为面板类型+对接面板配置，并新增呆呆面板分组配置",
-  "rule": "^(雨云登录|雨云登陆|登陆雨云|登录雨云|雨云查询|查询雨云|雨云管理|管理雨云|雨云授权|雨云教程)$",
-  "icon": "https://www.rainyun.com/img/logo.d193755d.png",
-  "author": "sky2022",
-  "class": "",
-  "public": true,
-  "admin": false,
-  "disable": true
- },
  "plugins/雨云签到.py": {
   "id": "雨云签到",
   "name": "雨云签到",
