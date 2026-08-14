@@ -10,11 +10,11 @@
 # [title: 雨云]
 # [open_source: false]
 # [class: 工具类]
-# [version: 1.0.0]
+# [version: 2.0.0]
 # [price: 0]
 # [admin: false]
 # [icon: https://www.rainyun.com/img/logo.d193755d.png]
-# [description: 雨云账号管理插件（结构对齐芳华模板，纯青龙面板）。<br>1. 指令：雨云登录、查询、管理、授权、清理、教程。<br>2. 用户提交 账号#密码，支持批量。<br>3. 登录校验后同步青龙变量(dw_yy)。<br>4. 授权支付接入清蕴支付统一收银台；保留脚本代理/滑块/签到能力；定时检测到期提醒。]
+# [description: 雨云账号管理插件。<br>1. 指令：雨云登录、查询、管理、授权、清理、教程。<br>2. 用户提交 账号#密码，支持批量。<br>3. 登录校验后同步青龙变量(dw_yy)。<br>4. 授权支付接入清蕴支付统一收银台；保留脚本代理/滑块/签到能力；定时检测到期提醒。]
 
 # [param: {"required":true,"key":"rainyun.ql_config","bool":false,"placeholder":"http://地址:端口丨ClientID丨ClientSecret","name":"对接青龙","desc":"青龙地址丨ClientID丨ClientSecret"}]
 # [param: {"required":true,"key":"rainyun.osname","bool":false,"placeholder":"默认:dw_yy","name":"系统变量名","desc":"青龙环境变量名(默认为dw_yy)"}]
@@ -23,7 +23,6 @@
 # [param: {"required":false,"key":"rainyun.proxy_pool_url","bool":false,"placeholder":"http://代理池API地址","name":"代理池地址","desc":"返回单个代理地址的接口"}]
 # [param: {"required":false,"key":"rainyun.verify_token","bool":false,"placeholder":"2captcha clientKey","name":"滑块Token","desc":"对应脚本VERIFY_TOKEN，用于签到滑块验证"}]
 # [param: {"required":false,"key":"rainyun.invite_url","bool":false,"placeholder":"https://www.rainyun.com/MTA4NzA0_","name":"推广链接","desc":"雨云推广/注册链接"}]
-# [param: {"required":false,"key":"rainyun.reminder_days","bool":false,"placeholder":"例:2","name":"到期提醒天数","desc":"到期前多少天开始发送提醒通知"}]
 
 import hashlib
 import json
@@ -107,7 +106,7 @@ def get_account_token(account_id):
 
 
 def save_account_token(account_id, token):
-    """保存账号的雨云 Token（加密存储）。"""
+    """保存账号的雨云 Token（明文存储）。"""
     account_id = str(account_id or "").strip()
     token = str(token or "").strip()
     if not token:
@@ -172,26 +171,6 @@ def is_proxy_enabled():
     return str(get_config("enable_proxy", "false") or "false").lower() in {"true", "1", "yes"}
 
 
-def get_proxy():
-    """按插件配置获取一次代理。"""
-    if not is_proxy_enabled():
-        return None
-    proxy_api = get_config("proxy_pool_url")
-    if not proxy_api:
-        raise PluginError("已启用代理，但未配置代理池地址")
-    response = requests.get(proxy_api, timeout=15, verify=False)
-    response.raise_for_status()
-    proxy_url = (response.text or "").strip()
-    match = re.search(r"(?:https?://)?(?:[\w.-]+:[\w.-]+@)?\d+\.\d+\.\d+\.\d+:\d+", proxy_url)
-    if match:
-        proxy_url = match.group(0)
-    if not proxy_url:
-        raise PluginError("代理池没有返回可用代理")
-    if not proxy_url.startswith(("http://", "https://")):
-        proxy_url = "http://" + proxy_url
-    return {"http": proxy_url, "https": proxy_url}
-
-
 def get_payment_config():
     """读取并校验授权价格（元/月）。"""
     try:
@@ -199,13 +178,6 @@ def get_payment_config():
     except (InvalidOperation, ValueError) as exc:
         raise PluginError(f"授权价格配置错误：{exc}") from exc
     return price
-
-
-def get_reminder_days():
-    try:
-        return int(get_config("reminder_days", "2") or "2")
-    except (TypeError, ValueError):
-        return 2
 
 
 def get_verify_token():
@@ -844,14 +816,13 @@ class RainyunClient:
             pass
         name = display_name or self.nickname or self.username or "未知"
         return (
-            "=======【运行结果】=======\n"
-            "📱 账号: %s\n"
-            "📧 邮箱: %s\n"
-            "📝 签到: %s\n"
-            "💰 积分: %s\n"
-            "🌐 IP: %s\n"
-            "📍 地区: %s\n"
-            "======================="
+            "=======运行结果=======\n"
+            "📱【账号】%s\n"
+            "📧【邮箱】%s\n"
+            "📝【签到】%s\n"
+            "💰【积分】%s\n"
+            "🌐【IP】%s\n"
+            "📍【地区】%s\n"
         ) % (
             mask_account(name),
             mask_account(self.email or "-"),
@@ -883,7 +854,7 @@ def get_user_input(timeout=60):
         response = sender.listen(timeout * 1000)
         if not response:
             return None
-        response = response.strip()
+        response = str(response).strip()
         if response.lower() in ["q", "quit", "exit", "退出", "cancel"]:
             return "q"
         return response
@@ -943,12 +914,11 @@ def process_payment(months, account_count=1):
 
     if paid_money + 1e-6 < amount:
         sender.reply(
-            "=======【支付失败】=======\n"
+            "=======支付失败=======\n"
             "❌ 支付金额不足\n"
             "------------------\n"
-            f"💰 应付: {amount}元\n"
-            f"💵 实付: {paid_money}元\n"
-            "======================="
+            f"💰【应付】{amount}元\n"
+            f"💵【实付】{paid_money}元\n"
         )
         return False
     return True
@@ -975,10 +945,10 @@ def authorize_accounts(accounts, months=None):
     count = len(accounts)
     total_money = (Decimal(months) * get_payment_config() * count).quantize(Decimal("0.01"))
     sender.reply(
-        f"=======【授权确认】=======\n"
-        f"👥 账号数量: {count}个\n"
-        f"📅 授权时长: {months}个月\n"
-        f"💰 总需金额: {total_money}元\n"
+        f"=======授权确认=======\n"
+        f"👥【账号数量】{count}个\n"
+        f"📅【授权时长】{months}个月\n"
+        f"💰【总需金额】{total_money}元\n"
         f"------------------\n"
         f"即将进入清蕴支付收银台\n"
         f"回复 y 继续，q 取消"
@@ -1008,49 +978,33 @@ def authorize_accounts(accounts, months=None):
             errors.append(f"{mask_account(get_display_name(account_id))}：{exc}")
 
     report = (
-        "=======【授权完成】=======\n"
-        f"授权 {months} 个月\n"
-        f"成功：{success_count} 个账号\n"
-        f"失败：{len(errors)} 个账号"
+        "=======授权完成=======\n"
+        f"📅【授权】{months} 个月\n"
+        f"✅【成功】{success_count} 个账号\n"
+        f"❌【失败】{len(errors)} 个账号"
     )
     if errors:
         report += "\n------------------\n" + "\n".join(errors[:5])
     sender.reply(report)
 
 
-def show_ck(account_id):
-    """显示账号保存的 Token。"""
-    account_id = str(account_id)
-    token = get_account_token(account_id)
-    if token:
-        preview = token[:40] + "..." if len(token) > 40 else token
-        sender.reply(
-            "=======【账号Token】=======\n"
-            f"📱 账号：{mask_account(get_display_name(account_id))}\n"
-            f"🔑 Token：{preview}\n"
-            "========================="
-        )
-    else:
-        sender.reply(f"❌ {mask_account(get_display_name(account_id))} 未绑定 Token")
-
 
 def batch_login():
     """账密批量登录：输入 账号#密码（换行分隔），登录校验后保存 Token。"""
     invite = get_invite_url()
     sender.reply(
-        "=======【雨云登录】=======\n"
+        "=======雨云登录=======\n"
         "请直接发送数据，格式如下(一行一个)：\n"
         "账号#密码\n"
         "------------------\n"
         f"注册: {invite}\n"
         "支持批量登录(换行分隔)\n"
         '回复"q"退出操作\n'
-        "========================="
     )
 
     input_str = get_user_input(timeout=180)
-    if not input_str or str(input_str).lower() == "q":
-        sender.reply("已取消")
+    if not input_str or input_str.lower() == "q":
+        sender.reply("✅ 已退出")
         return
 
     token_lines = [line.strip() for line in str(input_str).replace("\r", "\n").split("\n") if line.strip()]
@@ -1100,11 +1054,10 @@ def batch_login():
 
             if len(token_lines) == 1:
                 sender.reply(
-                    "=======【账号更新】=======\n"
-                    f"📱 账号：{mask_account(nick)}\n"
-                    f"🆔 ID：{mask_account(get_display_name(acc_id))}\n"
-                    f"✅ 状态：{status}\n"
-                    "========================="
+                    "=======账号更新=======\n"
+                    f"📱【账号】{mask_account(nick)}\n"
+                    f"🆔【ID】{mask_account(get_display_name(acc_id))}\n"
+                    f"✅【状态】{status}\n"
                 )
         except Exception as ex:
             bind_stats["fail"] += 1
@@ -1119,55 +1072,22 @@ def batch_login():
         if fail_msgs:
             fail_text = "\n失败原因: " + "；".join(list(dict.fromkeys(fail_msgs))[:3])
         sender.reply(
-            "=======【登录汇总】=======\n"
-            f"✅ 成功: {bind_stats['success']} 个\n"
-            f"🆕 新增: {bind_stats['new']} 个\n"
-            f"🔄 更新: {bind_stats['update']} 个\n"
-            f"❌ 失败: {bind_stats['fail']} 个{fail_text}\n"
-            "========================="
+            "=======登录汇总=======\n"
+            f"✅【成功】{bind_stats['success']} 个\n"
+            f"🆕【新增】{bind_stats['new']} 个\n"
+            f"🔄【更新】{bind_stats['update']} 个\n"
+            f"❌【失败】{bind_stats['fail']} 个{fail_text}\n"
         )
 
-
-def select_accounts(title):
-    """显示账号选择菜单并返回选中的账号 ID 列表。"""
-    accounts = get_user_accounts()
-    if not accounts:
-        sender.reply("❌ 未绑定账号，请先发送“雨云登录”")
-        return []
-    if len(accounts) == 1:
-        return accounts
-    menu = f"=======【{title}】=======\n[0] 全部账号\n------------------\n"
-    for index, account_id in enumerate(accounts, 1):
-        menu += f"[{index}] {mask_account(get_display_name(account_id))}\n"
-    menu += "------------------\n回复数字选择，回复 q 退出"
-    sender.reply(menu)
-    choice = get_user_input(timeout=30)
-    if not choice or choice.lower() == "q":
-        return []
-    if not choice.isdigit():
-        sender.reply("❌ 请输入数字序号")
-        return []
-    index = int(choice)
-    if index == 0:
-        return accounts
-    if 1 <= index <= len(accounts):
-        return [accounts[index - 1]]
-    sender.reply("❌ 选择超出范围")
-    return []
-
-
-def query_single(account_id, index, total_count):
+def query_single(account_id):
     """查询单个雨云账号信息。"""
     account_id = str(account_id)
     auth_time = get_auth_time(account_id)
     today = str(datetime.now().date())
     if not auth_time:
-        auth_flag = "未授权"
         auth_time = "无"
-    elif auth_time < today:
-        auth_flag = "已过期"
-    else:
-        auth_flag = "已授权"
+    elif auth_time >= today:
+        pass  # 有效授权
 
     token = get_account_token(account_id)
     live = "未知"
@@ -1224,16 +1144,13 @@ def query_single(account_id, index, total_count):
 
     if live == "存活":
         return (
-            "=======【账号查询】======= [%s/%s]\n"
-            "📱 账号: %s\n"
-            "💰 积分: %s\n"
-            "📝 签到: %s\n"
-            "📍 登录地区: %s\n"
-            "⏰ 授权到期: %s\n"
-            "========================="
+            "=======账号查询=======\n"
+            "📱【账号】%s\n"
+            "💰【积分】%s\n"
+            "📝【签到】%s\n"
+            "📍【登录地区】%s\n"
+            "⏰【授权到期】%s\n"
         ) % (
-            index,
-            total_count,
             mask_account(display_name),
             points,
             sign_status,
@@ -1242,15 +1159,12 @@ def query_single(account_id, index, total_count):
         )
     else:
         return (
-            "=======【账号查询】======= [%s/%s]\n"
-            "📱 账号: %s\n"
-            "🔴 状态: %s\n"
-            "⏰ 授权到期: %s\n"
-            "⚠️ 详情: %s\n"
-            "========================="
+            "=======账号查询=======\n"
+            "📱【账号】%s\n"
+            "🔴【状态】%s\n"
+            "⏰【授权到期】%s\n"
+            "⚠️【详情】%s\n"
         ) % (
-            index,
-            total_count,
             mask_account(display_name),
             live,
             auth_time,
@@ -1266,11 +1180,10 @@ def query():
         return
 
     total_count = len(accounts)
-    today_time = str(datetime.now().date())
-    menu = "=======【雨云查询】======="
+    menu = "=======雨云查询=======\n[0] 全选"
     for i, acc in enumerate(accounts, 1):
         menu += f"\n[{i}] {mask_account(get_display_name(acc))}"
-    menu += "\n[0]全选\n------------------\n支持单选/多选/区间，如 1,2 或 3-6\n回复q退出\n========================="
+    menu += "\n------------------\n支持单选/多选/区间，如 1,2 或 3-6\n回复q退出"
     sender.reply(menu)
 
     sel = get_user_input(timeout=60)
@@ -1279,10 +1192,10 @@ def query():
         return
 
     if sel.strip() == "0":
-        target = list(enumerate(accounts, 1))
+        target = accounts
     else:
         selected_idxs, invalid_parts = parse_index_selection(sel, total_count, allow_all=False)
-        target = [(idx, accounts[idx - 1]) for idx in selected_idxs]
+        target = [accounts[idx - 1] for idx in selected_idxs]
         if not target:
             sender.reply("❌ 请输入有效序号，例如 1,2 或 3-6")
             return
@@ -1290,8 +1203,8 @@ def query():
             sender.reply(f"⚠️ 已忽略无效内容: {','.join(invalid_parts[:5])}")
 
     sender.reply(f"🚀 正在查询 {len(target)} 个账号，请稍候...")
-    for index, account_id in target:
-        sender.reply(query_single(account_id, index, total_count))
+    for account_id in target:
+        sender.reply(query_single(account_id))
 
 
 def parse_index_selection(text, total_count, allow_all=True):
@@ -1360,13 +1273,11 @@ def manage_accounts():
     if not accounts:
         sender.reply("❌ 未绑定账号，请先发送“雨云登录”")
         return
-    today_time = str(datetime.now().date())
     menu = (
-        "=======【账号列表】=======\n"
+        "=======账号列表=======\n"
         "📦 批量操作:\n"
         "[00] 授权全部账号\n"
         "[01] 删除全部账号\n"
-        "[02] 查看全部账号Token\n"
         "------------------\n"
         "📋 账号列表:"
     )
@@ -1376,17 +1287,18 @@ def manage_accounts():
             menu += (
                 f"\n[{index}] {mask_account(get_display_name(account_id))}\n"
                 "    ✅ 已授权\n"
-                f"    ⏰ 授权到期: {auth_time}"
+                f"    ⏰【授权到期】{auth_time}"
             )
         else:
             status = "授权已过期" if auth_time else "未授权"
             menu += f"\n[{index}] {mask_account(get_display_name(account_id))}\n    ❌ {status}"
             if auth_time:
-                menu += f"\n    ⏰ 授权到期: {auth_time}"
+                menu += f"\n    ⏰【授权到期】{auth_time}"
     menu += "\n------------------\n回复数字选择账号\n回复'q'退出"
     sender.reply(menu)
     choice = get_user_input(timeout=60)
     if not choice or choice.lower() == "q":
+        sender.reply("✅ 已退出")
         return
     try:
         if choice == "00":
@@ -1395,9 +1307,6 @@ def manage_accounts():
             for account_id in list(accounts):
                 delete_account(account_id)
             sender.reply("✅ 已删除全部账号")
-        elif choice == "02":
-            for account_id in accounts:
-                show_ck(account_id)
         else:
             if not choice.isdigit() or not 1 <= int(choice) <= len(accounts):
                 sender.reply("❌ 无效的账号序号")
@@ -1413,23 +1322,23 @@ def show_account_menu(account_id):
     auth_time = get_auth_time(account_id)
     authorized = is_authorized(account_id)
     auth_status = "✅ 已授权" if authorized else "❌ 未授权"
-    auth_info = f"\n    到期: {auth_time}" if auth_time else ""
+    auth_info = f"\n    ⏰【授权到期】{auth_time}" if auth_time else ""
     sender.reply(
-        "=======【账号操作】=======\n"
-        f"📱 账号: {mask_account(get_display_name(account_id))}\n"
-        f"🔐 状态: {auth_status}{auth_info}\n"
+        "=======账号操作=======\n"
+        f"📱【账号】{mask_account(get_display_name(account_id))}\n"
+        f"🔐【状态】{auth_status}{auth_info}\n"
         "------------------\n"
         "[1] 授权账号\n"
         "[2] 删除账号\n"
-        "[3] 查看账号Token\n"
-        "[4] 重新提交青龙\n"
-        "[5] 每日签到\n"
+        "[3] 重新提交青龙\n"
+        "[4] 每日签到\n"
         "------------------\n"
         "回复数字选择操作\n"
         '回复"q"退出'
     )
     action = get_user_input(timeout=60)
     if not action or action.lower() == "q":
+        sender.reply("✅ 已退出")
         return
     try:
         if action == "1":
@@ -1439,15 +1348,13 @@ def show_account_menu(account_id):
             if get_user_input(timeout=60) == "y":
                 delete_account(account_id)
         elif action == "3":
-            show_ck(account_id)
-        elif action == "4":
             token = get_account_token(account_id)
             if not token:
                 sender.reply("❌ 未找到 Token，请先登录")
                 return
             submit_to_qinglong(account_id, user_id, token)
             sender.reply("✅ 已重新提交青龙")
-        elif action == "5":
+        elif action == "4":
             token = get_account_token(account_id)
             if not token:
                 sender.reply("❌ 未找到 Token，请先登录")
@@ -1500,7 +1407,7 @@ def grant_accounts(owner_id, accounts, days):
 def admin_auth_all_users():
     """管理员为全部插件用户的全部账号统一增加授权天数。"""
     sender.reply(
-        "=======【批量授权】=======\n"
+        "=======批量授权=======\n"
         "请输入授权天数(正数增加，负数如-10扣除)\n"
         "------------------\n"
         "回复数字设置天数\n"
@@ -1528,11 +1435,11 @@ def admin_auth_all_users():
         success_count += current_success
         errors.extend(current_errors)
     report = (
-        "=======【授权完成】=======\n"
-        f"👥 用户：{user_count} 个\n"
-        f"✅ 成功：{success_count} 个账号\n"
-        f"❌ 失败：{len(errors)} 个账号\n"
-        f"📅 授权：{days} 天"
+        "=======授权完成=======\n"
+        f"👥【用户】{user_count} 个\n"
+        f"✅【成功】{success_count} 个账号\n"
+        f"❌【失败】{len(errors)} 个账号\n"
+        f"📅【授权】{days} 天"
     )
     if errors:
         report += "\n------------------\n" + "\n".join(errors[:5])
@@ -1542,20 +1449,21 @@ def admin_auth_all_users():
 def admin_auth_specific_user():
     """管理员为指定插件用户的全部或单个账号授权。"""
     sender.reply(
-        "=======【指定授权】=======\n"
+        "=======指定授权=======\n"
         "请输入用户ID\n"
         "------------------\n"
         "回复 q 退出"
     )
     owner_id = get_user_input(timeout=60)
     if not owner_id or owner_id.lower() == "q":
+        sender.reply("✅ 已退出")
         return
     accounts = parse_stored_accounts(owner_id)
     if not accounts:
         sender.reply("❌ 未找到该用户的账号")
         return
     menu = (
-        "=======【账号列表】=======\n"
+        "=======账号列表=======\n"
         "[00] 授权全部账号\n"
         "------------------"
     )
@@ -1564,11 +1472,12 @@ def admin_auth_specific_user():
         status = "✅ 已授权" if is_authorized(account_id) else "❌ 未授权"
         menu += f"\n[{index}] {mask_account(get_display_name(account_id))}\n    {status}"
         if auth_time:
-            menu += f"\n    ⏰ 授权到期: {auth_time}"
+            menu += f"\n    ⏰【授权到期】{auth_time}"
     menu += "\n------------------\n回复数字选择账号\n回复 q 退出"
     sender.reply(menu)
     choice = get_user_input(timeout=60)
     if not choice or choice.lower() == "q":
+        sender.reply("✅ 已退出")
         return
     if choice == "00":
         selected_accounts = accounts
@@ -1616,11 +1525,11 @@ def update_all_qinglong_envs():
             except Exception as exc:
                 errors.append(f"{mask_account(get_display_name(account_id))}：{exc}")
     sender.reply(
-        "=======【更新青龙】=======\n"
-        f"👥 用户：{user_count} 个\n"
-        f"📱 账号：{account_count} 个\n"
-        f"✅ 成功：{success_count} 个\n"
-        f"❌ 失败：{len(errors)} 个"
+        "=======更新青龙=======\n"
+        f"👥【用户】{user_count} 个\n"
+        f"📱【账号】{account_count} 个\n"
+        f"✅【成功】{success_count} 个\n"
+        f"❌【失败】{len(errors)} 个"
     )
 
 
@@ -1630,7 +1539,7 @@ def admin_auth():
         sender.reply("❌ 需要管理员权限")
         return
     sender.reply(
-        "=======【授权管理】=======\n"
+        "=======授权管理=======\n"
         "[1] 一键授权所有用户\n"
         "[2] 指定用户授权\n"
         "[3] 更新青龙环境变量\n"
@@ -1640,6 +1549,7 @@ def admin_auth():
     )
     choice = get_user_input(timeout=60)
     if not choice or choice.lower() == "q":
+        sender.reply("✅ 已退出")
         return
     if choice == "1":
         admin_auth_all_users()
@@ -1672,10 +1582,10 @@ def cron_check():
                     except Exception:
                         pass
                     notification = (
-                        f"=======【到期通知】=======\n"
-                        f"📦 项目：{SCRIPT_NAME}\n"
-                        f"📱 账号：{mask_account(get_display_name(account_id))}\n"
-                        f"📢 消息：授权已于 {auth_time} 到期，青龙变量已清理"
+                        f"=======到期通知=======\n"
+                        f"📦【项目】{SCRIPT_NAME}\n"
+                        f"📱【账号】{get_display_name(account_id)}\n"
+                        f"📢【消息】授权已于 {auth_time} 到期，青龙变量已清理"
                     )
                     for platform in ("qq", "wx", "tg", "qx", "ipad"):
                         try:
@@ -1753,30 +1663,28 @@ def notify_authorized_users():
             except Exception as e:
                 fail_count += 1
                 logger.warning(f"通知发送失败 {owner_id}: {e}")
-    sender.reply(f"✅ 通知完成\n⚠️ 发送失败: {fail_count} 人\n📢 已送达: {success_count} 人")
+    sender.reply(f"✅【通知完成】\n⚠️【发送失败】{fail_count} 人\n📢【已送达】{success_count} 人")
 
 
 def tutorial():
     """显示插件使用教程。"""
     sender.reply(
-        f"[CQ:image,file={get_invite_url()}]"
-        "=======【雨云教程】=======\n"
-        "1. 注册下载：扫描上方二维码或访问推广链接注册雨云\n"
+        f"注册链接：{get_invite_url()}\n"
+        "=======雨云教程=======\n"
+        "1. 注册下载：点击上方链接注册雨云\n"
         '2. 账密登录：发送"雨云登录"，输入 账号#密码 获取 Token\n'
         '3. 授权代挂：在"雨云管理"中选择账号授权，走清蕴支付收银台\n'
         "4. 授权费用：按插件配置的月价计费\n"
         "5. 自动签到：管理菜单支持每日签到（需配置 2captcha 滑块 Token）\n"
-        "========================="
     )
     sender.reply(
-        "=======【可用指令】=======\n"
+        "=======可用指令=======\n"
         "雨云教程：查看注册和使用教程\n"
         "雨云登录：账密登录并绑定 Token\n"
         "雨云查询：查询积分、邮箱、IP、地区\n"
-        "雨云管理：授权、查看 Token、同步或删除账号\n"
+        "雨云管理：授权、同步或删除账号\n"
         "--------------------\n"
         "管理员指令：雨云授权、雨云清理、雨云通知\n"
-        "========================="
     )
 
 
