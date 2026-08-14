@@ -10,7 +10,7 @@
 # [title: 雨云]
 # [open_source: false]
 # [class: 工具类]
-# [version: 2.0.0]
+# [version: 1.0.0]
 # [price: 0]
 # [admin: false]
 # [icon: https://www.rainyun.com/img/logo.d193755d.png]
